@@ -442,13 +442,14 @@
 		<add name="index" type="uint">unknown index?</add>
     </compound>-->
 
-	
-    <bitstruct name="BitVector64" numbytes="8">
+	<!-- not used at the moment -->
+	<!-- needs new pyffi release to allow for 8 bytes -->
+<!--     <bitstruct name="BitVector64" numbytes="8">
         <bits name="Reserved" numbits="1" />
         <bits name="x" numbits="21" />
         <bits name="y" numbits="21" />
         <bits name="z" numbits="21" />
-    </bitstruct>
+    </bitstruct> -->
 	
 	<compound name="PackedVert" >
 		size 48
