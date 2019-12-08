@@ -146,13 +146,14 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 			z_str.read(stream, data=self)
 			return str(z_str)
 			
-		def read(self, stream, verbose=0, file="", reverse_sets=True):
+		def read(self, stream, verbose=0, file="", reverse_sets=True, write_dat=True):
 			"""Read a dds file.
 
 			:param stream: The stream from which to read.
 			:type stream: ``file``
 			"""
 			self.reverse_sets = reverse_sets
+			self.write_dat = write_dat
 			# store file name for later
 			if file:
 				self.file = file
@@ -308,7 +309,7 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 			# https://stackoverflow.com/questions/1838699/how-can-i-decompress-a-gzip-stream-with-zlib
 			# we avoid the two zlib magic bytes to get our unzipped content
 			zlib_data = bytearray( zlib.decompress(zlib_compressed_data, wbits = -zlib.MAX_WBITS) )
-			if save_temp_dat:
+			if save_temp_dat and self.write_dat:
 				# for debugging, write deflated content to dat
 				with open(save_temp_dat, 'wb') as out:
 					out.write(zlib_data)
