@@ -720,7 +720,7 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 			self.header_size = stream.tell()
 			set_data_size = self.header_size - set_data_offset
 			if set_data_size != self.archive_entry.set_data_size:
-				raise AttributeError("Set data size incorrect (got "+str(set_data_size)+", expected "+str(entry.set_data_size)+")!")
+				raise AttributeError("Set data size incorrect (got {}, expected {})!".format(set_data_size, self.archive_entry.set_data_size) )
 			
 			# another integrity check
 			if self.calc_uncompressed_size() != self.archive_entry.uncompressed_size:
