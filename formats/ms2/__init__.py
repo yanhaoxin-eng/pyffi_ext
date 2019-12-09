@@ -199,10 +199,12 @@ class Ms2Format(pyffi.object_models.xml.FileFormat):
 									
 			# set material links
 			for mat_1 in self.mdl2_header.materials_1:
-				name = self.ms2_header.names[mat_1.material_index]
-				model = self.mdl2_header.models[mat_1.model_index]
-				model.material = name
-			
+				try:
+					name = self.ms2_header.names[mat_1.material_index]
+					model = self.mdl2_header.models[mat_1.model_index]
+					model.material = name
+				except:
+					print("Couldn't match material -bug?")
 			self.mdl2_header.lod_names = [self.ms2_header.names[lod.strznameidx] for lod in self.mdl2_header.lods]
 			print("lod_names", self.mdl2_header.lod_names)
 				
