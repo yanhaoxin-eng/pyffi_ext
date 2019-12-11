@@ -1,4 +1,4 @@
-# ***** BEGIN LICENSE BLOCK *****
+﻿# ***** BEGIN LICENSE BLOCK *****
 #
 # Copyright (c) 2007-2012, Python File Format Interface
 # All rights reserved.
@@ -146,14 +146,14 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 			z_str.read(stream, data=self)
 			return str(z_str)
 			
-		def read(self, stream, verbose=0, file="", reverse_sets=True, write_dat=True):
+		def read(self, stream, verbose=0, file="", commands=[], ):
 			"""Read a dds file.
 
 			:param stream: The stream from which to read.
 			:type stream: ``file``
 			"""
-			self.reverse_sets = reverse_sets
-			self.write_dat = write_dat
+			# store commands
+			self.commands = commands
 			# store file name for later
 			if file:
 				self.file = file
@@ -309,15 +309,14 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 			# https://stackoverflow.com/questions/1838699/how-can-i-decompress-a-gzip-stream-with-zlib
 			# we avoid the two zlib magic bytes to get our unzipped content
 			zlib_data = bytearray( zlib.decompress(zlib_compressed_data, wbits = -zlib.MAX_WBITS) )
-			if save_temp_dat and self.write_dat:
+			if save_temp_dat and "write_dat" in self.commands:
 				# for debugging, write deflated content to dat
 				with open(save_temp_dat, 'wb') as out:
 					out.write(zlib_data)
 			# now read the archive stream
 			
 			archive = OvlFormat.Archive(self, zlib_data, archive_entry, archive_i)
-			archive.reverse_sets = self.reverse_sets
-			archive.read_archive(archive.stream, archive_i)
+			archive.read_archive( archive.stream )
 			self.archives.append( archive )
 
 		def write(self, stream, verbose=0, file_path = ""):
@@ -544,7 +543,7 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 			"""Calculate the size of the whole data entry region that sizedstr and fragment entries point into"""
 			return sum( header_entry.size for header_entry in self.header_entries )
 			
-		def read_archive(self, stream, archive_ii):
+		def read_archive(self, stream):
 			"""Reads a deflated archive stream"""
 			
 			inter = []
@@ -854,7 +853,7 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 			# now assign the mdl2 frags to their sized str entry
 			fixed_t = tuple( (2,2) for x in range(5))
 			# go in reversed set entry, forward asset entry order
-			set_entries = reversed(self.set_entries) if self.reverse_sets else self.set_entries
+			set_entries = reversed(self.set_entries) if "reverse_sets" in self.header.commands else self.set_entries
 			for set_entry in set_entries:
 				for asset_entry in set_entry.assets:
 					assert(asset_entry.name == asset_entry.entry.name)
@@ -946,7 +945,16 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 				# print("b.index", b.index, "address", address, "b.size", b.size)
 				inter.append( ((address, address+b.size), "buffer for file: "+n ) )
 			
+			# print("\nProcessed intervals in file:")
+			# inter.sort()
+			# for x, name in inter:
+				# # if 310000 < x[0] < 311500:
+				# print(x, name)
 			
+			if "write_frag_log" in self.header.commands:
+				self.write_frag_log()
+		
+		def write_frag_log(self,):
 			# # this is just for developing to see which unique attributes occur across a list of entries
 			# ext_hashes = sorted(set([f.offset for f in self.header.files]))
 			# print(ext_hashes)
@@ -962,15 +970,9 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 				# #frag_log+="\nEntry "+str(f.header_index_0)+" "+str(f.data_offset_0)+" "+str(f.header_index_1)+" "+str(f.data_offset_1)
 				# #frag_log+="\nSized str "+str(f.sized_str_entry_index)+" "+str(f.name)
 				frag_log+= "\n"+str(i)+" "+str(frag.pointers[0].address)+" "+str(frag.pointers[0].data_size)+" "+str(frag.pointers[1].address)+" "+str(frag.pointers[1].data_size)+" "+str(frag.name)+" "+str(frag.pointers[0].type)+" "+str(frag.pointers[1].type)
-			with open(self.indir("frag"+str(archive_ii)+".log"), "w") as f:
+			with open(self.indir("frag"+str(self.archive_index)+".log"), "w") as f:
 				f.write(frag_log)
-				
-			# print("\nProcessed intervals in file:")
-			# inter.sort()
-			# for x, name in inter:
-				# # if 310000 < x[0] < 311500:
-				# print(x, name)
-				
+		
 		def get_header_reader(self, entry, ind=0):
 			p = entry.pointers[ind]
 			header_reader = self.headers_data_io[p.header_index]			
