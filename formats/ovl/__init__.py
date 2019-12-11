@@ -47,6 +47,7 @@ import pyffi.object_models
 from pyffi_ext.formats.dds import DdsFormat
 from pyffi_ext.formats.ms2 import Ms2Format
 from pyffi_ext.formats.bani import BaniFormat
+from pyffi_ext.formats.fgm import FgmFormat
 
 def djb(s):
 	# calculates DJB hash for string s
@@ -381,8 +382,7 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 		def extract_all(self, dir):
 			print("foo")
 
-	
-			
+		
 	class BufferEntry:
 		def load_data(self, data):
 			"""Set data internal data so it can be written on save and update the size value"""
@@ -781,16 +781,12 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 			print("\nMapping SizedStr to Fragment")
 			# if there is more than one model we have an extra fgm fragment that links fgm to model
 			print("ms2_count ",ms2_count)
-			fgm_frag_count = 5 if ms2_count > 1 else 4
 			# todo: document more of these type requirements
 			dic = { 
-					#"fgm": ( (2,2) for x in range(fgm_frag_count) ),
-                    "fgm": ( (2,2), (2,2), (2,2), (2,2), ),
 					"ms2": ( (2,2), (2,2), (2,2), ),
 					"bani": ( (2,2), ),
 					"tex": ( (3, 3), (3,7), ),
                     "xmlconfig": ( (2, 2), ),
-					# "mdl2": ( (2,2) for x in range(5) ),
 					# "txt": ( ),
 					# "enumnamer": ( (4,4), ),
 					# "motiongraphvars": ( (4,4), (4,6), (4,6), (4,6), (4,6), (4,6), (4,6), (4,6), ),
@@ -843,13 +839,23 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 					t = dic[sized_str_entry.ext]
 					# get and set fragments
 					sized_str_entry.fragments = self.get_frag_after(address_0_fragments, t, sized_str_entry.pointers[0].address)
-			
-			# get all fixed self.fragments, 5 per file
+				
+				elif sized_str_entry.ext == "fgm":
+					print(sized_str_entry.name, sized_str_entry.pointers[0].data_size)
+					if sized_str_entry.pointers[0].data_size == 24:
+						fgm_frag_count = 2
+					elif sized_str_entry.pointers[0].data_size == 16:
+						fgm_frag_count = 4
+					t = tuple( (2,2) for x in range(fgm_frag_count))
+					# get and set fragments
+					sized_str_entry.fragments = self.get_frag_after(address_0_fragments, t, sized_str_entry.pointers[0].address)
+				
+			# get all fixed fragments, 5 per file
 			t = ( (2,2) for x in range(mdl2_count*5))
 			# we have no initpos for these as the mdl2 entries have no data offset
 			mdl2_fixed_frags = self.get_mdl2frag(address_0_fragments, t )
 			
-			# second pass: collect model self.fragments
+			# second pass: collect model fragments
 			# now assign the mdl2 frags to their sized str entry
 			fixed_t = tuple( (2,2) for x in range(5))
 			# go in reversed set entry, forward asset entry order
@@ -860,7 +866,7 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 					sized_str_entry = asset_entry.entry
 					if sized_str_entry.ext == "mdl2":
 						sized_str_entry.fragments = self.get_frag2(mdl2_fixed_frags, fixed_t)
-						print("Collecting model self.fragments for",sized_str_entry.name)
+						print("Collecting model fragments for",sized_str_entry.name)
 						
 						# todo: get model count from CoreModelInfo
 						# but that needs to get the first one from the ms2
