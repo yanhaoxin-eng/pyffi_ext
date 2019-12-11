@@ -1,4 +1,4 @@
-﻿# ***** BEGIN LICENSE BLOCK *****
+# ***** BEGIN LICENSE BLOCK *****
 #
 # Copyright (c) 2007-2012, Python File Format Interface
 # All rights reserved.
@@ -840,7 +840,7 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 			for sized_str_entry in sorted_sized_str_entries:
 				# get fixed fragments
 				if sized_str_entry.ext in dic:
-					print("Collecting fragments for",sized_str_entry.name)
+					print("Collecting fragments for",sized_str_entry.name,sized_str_entry.pointers[0].address)
 					t = dic[sized_str_entry.ext]
 					# get and set fragments
 					sized_str_entry.fragments = self.get_frag_after(address_0_fragments, t, sized_str_entry.pointers[0].address)
@@ -888,9 +888,9 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 						sized_str_entry.model_data_frags = self.get_model_data_frags(address_0_fragments, t)
 				
 			# # for debugging only:
-			# for sized_str_entry in sorted_sized_str_entries:
-				# for frag in sized_str_entry.model_data_frags + sized_str_entry.fragments:
-					# frag.name = sized_str_entry.name
+			for sized_str_entry in sorted_sized_str_entries:
+				for frag in sized_str_entry.model_data_frags + sized_str_entry.fragments:
+					frag.name = sized_str_entry.name
 							
 			# for header_i, header_entry in enumerate(self.header_entries):
 				# print("Header {} with unknown count {}".format(header_i, header_entry.num_files))
@@ -953,17 +953,17 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 			# # this is just for developing to see which unique attributes occur across a list of entries
 			# ext_hashes = sorted(set([f.size for f in self.fragments]))
 			# print(ext_hashes)
-			
+			self.dir = os.getcwd()
 			# # for development; collect info about fragment types			
-			# frag_log = "self.fragments > sizedstr\nfragments in file order"
-			# for i, frag in enumerate(sorted(self.fragments, key=lambda f: f.address_0)):
+			frag_log = "self.fragments > sizedstr\nfragments in file order"
+			for i, frag in enumerate(sorted(self.fragments, key=lambda f: f.pointers[0].address)):
 				# #frag_log+="\n\nFragment nr "+str(i)
 				# #frag_log+="\nHeader types "+str(f.type_0)+" "+str(f.type_1)
 				# #frag_log+="\nEntry "+str(f.header_index_0)+" "+str(f.data_offset_0)+" "+str(f.header_index_1)+" "+str(f.data_offset_1)
 				# #frag_log+="\nSized str "+str(f.sized_str_entry_index)+" "+str(f.name)
-				# frag_log+= "\n"+str(i)+" "+str(frag.address_0)+" "+str(frag.data_size_0)+" "+str(frag.address_1)+" "+str(frag.data_size_1)+" "+str(frag.name)+" "+str(frag.type_0)+" "+str(frag.type_1)
-			# with open(self.indir("frag"+str(archive_ii)+".log"), "w") as f:
-				# f.write(frag_log)
+				frag_log+= "\n"+str(i)+" "+str(frag.pointers[0].address)+" "+str(frag.pointers[0].data_size)+" "+str(frag.pointers[1].address)+" "+str(frag.pointers[1].data_size)+" "+str(frag.name)+" "+str(frag.pointers[0].type)+" "+str(frag.pointers[1].type)
+			with open(self.indir("frag"+str(archive_ii)+".log"), "w") as f:
+				f.write(frag_log)
 				
 			# print("\nProcessed intervals in file:")
 			# inter.sort()
