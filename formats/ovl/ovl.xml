@@ -44,8 +44,8 @@
 		<option value="85" name="DXGI_FORMAT_BC4_UNORM_SRGB"></option>
 		<option value="86" name="DXGI_FORMAT_BC5_UNORM"></option>
 		<option value="87" name="DXGI_FORMAT_BC5_UNORM_SRGB"></option>
-		<option value="88" name="DXGI_FORMAT_BC6_UNORM"></option>
-		<option value="89" name="DXGI_FORMAT_BC6_UNORM_SRGB"></option>
+		<option value="88" name="DXGI_FORMAT_BC6H_UF16">ptero aviary</option>
+		<option value="89" name="DXGI_FORMAT_BC6H_SF16"></option>
 		<option value="90" name="DXGI_FORMAT_BC7_UNORM"></option>
 		<option value="91" name="DXGI_FORMAT_BC7_UNORM_SRGB">PZ titan beetle</option>
     </enum>
