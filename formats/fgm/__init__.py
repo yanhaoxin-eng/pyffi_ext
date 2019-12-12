@@ -118,7 +118,7 @@ class FgmFormat(pyffi.object_models.xml.FileFormat):
 			# print(self.fgm_header)
 					
 			# maps FGM dtype to struct dtype
-			dtypes = {0:"f", 1:"f", 2:"f", 3:"f", 4:"I", 5:"i", 6:"i", 8:"I"}
+			dtypes = {0:"f", 1:"ff", 2:"fff", 3:"ffff", 4:"I", 5:"i", 6:"i", 8:"I"}
 
 			zeros = stream.read(self.fgm_header.zeros_size)
 			
@@ -141,14 +141,12 @@ class FgmFormat(pyffi.object_models.xml.FileFormat):
 				attrib.name = self.read_z_str(stream, name_start+attrib.offset)
 				fmt = dtypes[attrib.dtype]
 				stream.seek(data_start + attrib.first_value_offset)
-				attrib.value = struct.unpack("<"+fmt, stream.read(4) )[0]
+				attrib.value = struct.unpack("<"+fmt, stream.read(struct.calcsize(fmt)) )
 				if attrib.dtype == 6:
 					attrib.value = bool(attrib.value)
 				s = '{} = {}'.format(attrib.name, attrib.value)
 				print(s)
 				
-						
-			
 		def write(self, stream, verbose=0, file=""):
 			"""Write a dds file.
 
