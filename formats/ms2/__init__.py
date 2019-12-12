@@ -339,10 +339,10 @@ class Ms2Format(pyffi.object_models.xml.FileFormat):
 			stream.seek( self.start_buffer2 + data.ms2_header.buffer_info.vertexdatasize + self.tri_offset )
 			# print("tris offset",stream.tell())
 			# read all tri indices for this model segment
-			self.tri_indices = list( struct.unpack(self.tri_index_count*"H", stream.read( self.tri_index_count*2 ) ) )
+			self.tri_indices = list( struct.unpack( str(self.tri_index_count)+"H", stream.read( self.tri_index_count*2 ) ) )
 		
 		def write_tris(self, stream, data):
-			stream.write( struct.pack(len(self.tri_indices)*"H", *self.tri_indices ) )
+			stream.write( struct.pack( str(len(self.tri_indices)+"H", *self.tri_indices ) )
 		
 		@property
 		def lod_index(self,):
