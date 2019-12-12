@@ -342,7 +342,7 @@ class Ms2Format(pyffi.object_models.xml.FileFormat):
 			self.tri_indices = list( struct.unpack( str(self.tri_index_count)+"H", stream.read( self.tri_index_count*2 ) ) )
 		
 		def write_tris(self, stream, data):
-			stream.write( struct.pack( str(len(self.tri_indices)+"H", *self.tri_indices ) ) )
+			stream.write( struct.pack( str(len(self.tri_indices))+"H", *self.tri_indices ) )
 		
 		@property
 		def lod_index(self,):
