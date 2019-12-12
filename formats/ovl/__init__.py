@@ -113,9 +113,10 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 
 		# overriding pyffi.object_models.FileFormat.Data methods
 		def get_sized_str_entry(self, name):
+			lower_name = name.lower()
 			for archive in self.archives:
 				for sized_str_entry in archive.sized_str_entries:
-					if name == sized_str_entry.name:
+					if lower_name == sized_str_entry.lower_name:
 						return sized_str_entry
 			# still here - error!
 			raise KeyError("Can't find a sizedstr entry for {}, not from this archive?".format(name) )
@@ -641,6 +642,7 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 				sized_str_entry = OvlFormat.SizedStringEntry()
 				sized_str_entry.read(stream, self)
 				sized_str_entry.name = self.get_name(sized_str_entry)
+				sized_str_entry.lower_name = sized_str_entry.name.lower()
 				sized_str_entry.basename, sized_str_entry.ext = os.path.splitext(sized_str_entry.name)
 				sized_str_entry.ext = sized_str_entry.ext[1:]
 				sized_str_entry.children = []
