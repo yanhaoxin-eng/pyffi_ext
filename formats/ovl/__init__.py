@@ -379,23 +379,24 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 			for ovs_file in ovs_dict.values():
 				ovs_file.close()
 			
-			
-		def extract_all(self, dir):
-			print("foo")
-
+		
 		
 	class BufferEntry:
-		def load_data(self, data):
+		def read_data(self, archive):
+			"""Load data from archive stream into self for modification and io"""
+			self.data = archive.stream.read(self.size)
+
+		def update_data(self, data):
 			"""Set data internal data so it can be written on save and update the size value"""
 			self.data = data
 			self.size = len(data)
 			
 	class DataEntry:
-		def load_data(self, datas):
+		def update_data(self, datas):
 			"""Load datas into this DataEntry's buffers, and update its size values according to an assumed pattern
 			data : list of bytes object, each representing the data of one buffer for this data entry"""
 			for buffer, data in zip(self.buffers, datas):
-				buffer.load_data(data)
+				buffer.update_data(data)
 			# update data 0, 1 size
 			total = sum( len(d) for d in datas)
 			if len(datas) == 1:
@@ -422,8 +423,43 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 		def buffer_datas(self):
 			"""Get data for each non-empty buffer (should have been sorted before)"""
 			return list(buffer.data for buffer in self.buffers if buffer.size)
+	
+	class HeaderPointer:
+		def read_data(self, archive):
+			"""Load data from archive header data readers into pointer for modification and io"""
 
+			if self.header_index == 4294967295:
+				self.data = None
+			else:
+				header_reader = archive.headers_data_io[self.header_index]			
+				header_reader.seek(self.data_offset)
+				self.data = header_reader.read(self.data_size)
 			
+		def write_data(self, archive):
+			"""Load data from archive header data readers into pointer for modification and io"""
+
+			if self.header_index == 4294967295:
+				pass
+			else:
+				# get header_data to write into
+				writer = archive.headers_data_io[self.header_index]
+				# update data offset
+				self.data_offset = writer.tell()
+				# write data to io, adjusting the cursor for that header
+				writer.write(self.data)
+			
+		def update_data(self, data, update_copies=False):
+			"""Update data and size param"""
+			# todo - enforce modulo padding here?
+			self.data = data
+			self.data_size = len(data)
+			# update other pointers if asked to by the injector
+			if update_copies:
+				for other_pointer in self.copies:
+					other_pointer.update_data(data)
+			
+	
+
 	class Archive(pyffi.object_models.FileFormat.Data):
 		"""A class to contain the actual Ovl data."""
 		def __init__(self, header, zlib_data, archive_entry, archive_index = 0):
@@ -476,7 +512,17 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 			return n + "." + e
 		
 		def write_archive(self, stream):
-			
+					
+			# clear io objects
+			self.headers_data_io = list( io.BytesIO() for h in self.header_entries )
+			# maintain sorting order
+			# grab the first pointer for each address
+			# it is assumed that subsequent pointers to that address share the same data
+			sorted_first_pointers = [pointers[0] for address, pointers in sorted(self.pointer_map.items()) ]
+			# write updated strings
+			for pointer in sorted_first_pointers:
+				pointer.write_data(self)
+
 			# do this first so header entries can be updated
 			header_data_writer = io.BytesIO()
 			# the ugly stuff with all fragments and sizedstr entries
@@ -492,36 +538,17 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 				header_data_writer.write( header_data_bytes )
 			
 			# write out all entries
-			for header_type in self.header_types:
-				header_type.write(stream, self)
-				
-			for header_entry in self.header_entries:
-				header_entry.write(stream, self)
-				
-			for data_entry in self.data_entries:
-				data_entry.write(stream, self)
-				
-			for buffer_entry in self.buffer_entries:
-				buffer_entry.write(stream, self)
-				
-			for sized_str_entry in self.sized_str_entries:
-				sized_str_entry.write(stream, self)
-				
-			for frag in self.fragments:
-				frag.write(stream, self)
-				
+			for l in (self.header_types, self.header_entries, self.data_entries, 
+					  self.buffer_entries, self.sized_str_entries, self.fragments):
+				for entry in l:
+					entry.write(stream, self)
+			# write set & asset stuff
 			self.set_header.write(stream, self)
-			
-			for set_entry in self.set_entries:
-				set_entry.write(stream, self)
-				
-			for asset_entry in self.asset_entries:
-				asset_entry.write(stream, self)
-				
+			# write the header data containing all the pointers' datas
 			stream.write( header_data_writer.getvalue() )
 			
+			# write buffer data
 			for b in self.buffers_io_order:
-				# write buffer data
 				stream.write(b.data)
 				
 			# do some calculations
@@ -547,31 +574,57 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 		def read_archive(self, stream):
 			"""Reads a deflated archive stream"""
 			
-			inter = []
+			# read the entries in archive order
+			self.read_header_types()
+			self.read_header_entries()
+			self.read_data_entries()
+			self.read_buffer_entries()
+			self.read_sizedstr_entries()
+			self.read_fragment_entries()
+
+			set_data_offset = stream.tell()
+			print("Set header address", set_data_offset)
+			self.read_sets_assets()
+			self.map_assets()
+	
+			# size check again
+			self.header_size = stream.tell()
+			set_data_size = self.header_size - set_data_offset
+			if set_data_size != self.archive_entry.set_data_size:
+				raise AttributeError("Set data size incorrect (got {}, expected {})!".format(set_data_size, self.archive_entry.set_data_size) )
 			
-			# the entries in archive order
+			# another integrity check
+			if self.calc_uncompressed_size() != self.archive_entry.uncompressed_size:
+				raise AttributeError("Archive.uncompressed_size ({}) does not match calculated size ({})".format(self.archive_entry.uncompressed_size, self.calc_uncompressed_size()))
+			
+			# go back to header offset
+			stream.seek(self.header_size)
+			# this contains the sizedstr & fragment data
+			self.headers_data_io = list( io.BytesIO( stream.read(h.size) ) for h in self.header_entries )
+			
+			self.check_header_data_size = self.calc_header_data_size()
+			self.calc_pointer_addresses()
+			self.calc_pointer_sizes()
+			self.map_pointers()
+			self.populate_pointers()
+			
+			self.map_frags()
+			self.map_buffers()
+			
+			if "write_frag_log" in self.header.commands:
+				self.write_frag_log()
+		
+		def read_header_types(self):
+			"""Reads a HeaderType struct for the count"""
 			self.header_types = []
-			self.header_entries = []
-			self.data_entries = []
-			self.buffer_entries = []
-			self.sized_str_entries = []
-			self.fragments = []
-			self.set_entries = []
-			self.asset_entries = []
-			
-			# # a dict keyed with header type hashes 
-			# headers_by_type = {}
-			
-			
 			# for checks
 			check_header_types = 0
-			check_buffer_count = 0
-			
+
 			# read header types
 			print("Header Types")
 			for x in range(self.archive_entry.num_header_types):
 				header_type = OvlFormat.HeaderType()
-				header_type.read(stream, self)
+				header_type.read(self.stream, self)
 				# add this header_type's count to check var
 				check_header_types += header_type.num_headers
 				self.header_types.append(header_type)
@@ -580,13 +633,17 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 			# ensure that the sum equals the value specified by the archive_entry
 			if check_header_types != self.archive_entry.num_headers:
 				raise AttributeError("Mismatch between total amount of headers")
-			
+
+		def read_header_entries(self):
+			self.header_entries = []
+			# # a dict keyed with header type hashes 
+			# headers_by_type = {}
 			# read all header entries
 			print("Header Entries")
 			for header_type in self.header_types:
 				for i in range(header_type.num_headers):
 					header_entry = OvlFormat.HeaderEntry()
-					header_entry.read(stream, self)
+					header_entry.read(self.stream, self)
 					header_entry.header_type = header_type
 					header_entry.type = header_type.type
 					self.header_entries.append(header_entry)
@@ -602,12 +659,15 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 						# headers_by_type[ext_hash] = []
 					# # append this header so we can access by type & index per type
 					# headers_by_type[ext_hash].append(header_entry)
-			
+
+		def read_data_entries(self):
+			self.data_entries = []
+			check_buffer_count = 0
 			# read all data entries
 			print("Data Entries")
 			for i in range(self.archive_entry.num_datas):
 				data_entry = OvlFormat.DataEntry()
-				data_entry.read(stream, self)
+				data_entry.read(self.stream, self)
 				self.data_entries.append(data_entry)
 				check_buffer_count += data_entry.buffer_count
 				
@@ -621,26 +681,29 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 			if check_buffer_count != self.archive_entry.num_buffers:
 				raise AttributeError("Wrong buffer count (expected "+str(self.archive_entry.num_buffers)+")!")
 			
-			
 			# todo: figure out how barbasol calculates this
 			# aka self.archive_entry.data2_size
 			# if check_data_size_2 != self.archive_entry.size_2:
 				# raise AttributeError("Data size does not match")
-			
+
+		def read_buffer_entries(self):
+			self.buffer_entries = []
 			print("Buffer Entries")
 			# read all Buffer entries
 			for i in range(self.archive_entry.num_buffers):
 				buffer_entry = OvlFormat.BufferEntry()
-				buffer_entry.read(stream, self)
+				buffer_entry.read(self.stream, self)
 				self.buffer_entries.append(buffer_entry)
 				# print(buffer_entry)
 			print("Buffers",len(self.buffer_entries))
-			
+
+		def read_sizedstr_entries(self):
+			self.sized_str_entries = []
 			print("SizedString Entries")
 			# read all file entries type b
 			for i in range(self.archive_entry.num_files):
 				sized_str_entry = OvlFormat.SizedStringEntry()
-				sized_str_entry.read(stream, self)
+				sized_str_entry.read(self.stream, self)
 				sized_str_entry.name = self.get_name(sized_str_entry)
 				sized_str_entry.lower_name = sized_str_entry.name.lower()
 				sized_str_entry.basename, sized_str_entry.ext = os.path.splitext(sized_str_entry.name)
@@ -658,84 +721,37 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 				self.sized_str_entries.append(sized_str_entry)
 			print("Num SizedString Entries",len(self.sized_str_entries))
 
+		def read_fragment_entries(self):
+			self.fragments = []
 			print("Fragment Entries")
 			# read all self.fragments
 			for i in range(self.archive_entry.num_fragments):
 				fragment = OvlFormat.Fragment()
-				fragment.read(stream, self)
+				fragment.read(self.stream, self)
 				# we assign these later
 				fragment.done = False
 				fragment.lod = False
 				fragment.name = None
 				self.fragments.append(fragment)
-				# print(fragment.header_index_0, fragment.header_index_1)
 			print("Num Fragment Entries",len(self.fragments))
-			
-			# read self.set_header
-			set_data_offset = stream.tell()
-			print("Set header address", set_data_offset)
+
+		def read_sets_assets(self):
+			"""Read the set header block that defines sets and assets"""
 			self.set_header = OvlFormat.SetHeader()
-			self.set_header.read(stream, self)
-			# print(self.set_header)
+			self.set_header.read(self.stream, self)
+			print(self.set_header)
 			# signature check
 			if not (self.set_header.sig_a == 1065336831 and self.set_header.sig_b == 16909320):
 				raise AttributeError("Set header signature check failed!")
-			
 			print("Set Entries")
 			# read all set entries
-			for i in range(self.set_header.set_count):
-				set_entry = OvlFormat.SetEntry()
-				set_entry.read(stream, self)
-				self.set_entries.append(set_entry)
+			for set_entry in self.set_header.sets:
 				set_entry.name = self.get_name(set_entry)
-			print("Num self.set_entries",len(self.set_entries))
-				
-			# read all asset entries
-			print("Asset Entries")
-			for i in range(self.set_header.asset_count):
-				asset_entry = OvlFormat.AssetEntry()
-				asset_entry.read(stream, self)
-				self.asset_entries.append(asset_entry)
+			for asset_entry in self.set_header.assets:
 				asset_entry.name = self.get_name(asset_entry)
 				asset_entry.entry = self.sized_str_entries[asset_entry.file_index]
-			# store start and stop asset indices
-			for i, set_entry in enumerate(self.set_entries):
-				# for the last entry
-				if i == self.set_header.set_count-1:
-					set_entry.end = self.set_header.asset_count
-				# store start of the next one as this one's end
-				else:
-					set_entry.end = self.set_entries[i+1].start
-				# map assets to entry
-				set_entry.assets = self.asset_entries[set_entry.start : set_entry.end]
-				# print("SET:",set_entry.name)
-				# print("ASSETS:",[a.name for a in set_entry.assets])
-				# store the references on the corresponding sized str entry
-				sized_str_entry = self.find_entry(self.sized_str_entries, set_entry.file_hash, set_entry.ext_hash)
-				sized_str_entry.children = [self.sized_str_entries[a.file_index] for a in set_entry.assets]
-				for child in sized_str_entry.children:
-					child.parent = sized_str_entry
-			print("Num self.asset_entries",len(self.asset_entries))
- 
-			# size check again
-			self.header_size = stream.tell()
-			set_data_size = self.header_size - set_data_offset
-			if set_data_size != self.archive_entry.set_data_size:
-				raise AttributeError("Set data size incorrect (got {}, expected {})!".format(set_data_size, self.archive_entry.set_data_size) )
 			
-			# another integrity check
-			if self.calc_uncompressed_size() != self.archive_entry.uncompressed_size:
-				raise AttributeError("Archive.uncompressed_size ({}) does not match calculated size ({})".format(self.archive_entry.uncompressed_size, self.calc_uncompressed_size()))
-			
-			inter.append( ((0, self.header_size), "Headers till end of AssetEntries" ) )
-			print("\nstart extraction")
-			
-			
-			# go back to header offset
-			stream.seek(self.header_size)
-			# this contains the sizedstr & fragment data
-			self.headers_data_io = list( io.BytesIO( stream.read(h.size) ) for h in self.header_entries )
-			
+		def calc_pointer_addresses(self):
 			# store absolute read addresses from the start of file
 			for entry in self.fragments + self.sized_str_entries:
 				# for access from start of file
@@ -753,7 +769,66 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 						pointer.type = pointer.header.type
 						pointer.address = self.header_size + pointer.header.offset + pointer.data_offset
 			
+		def calc_pointer_sizes(self):
+			"""Assign an estimated size to every pointer"""
+			# calculate pointer data sizes
+			# get all pointers into the header datas, as absolute addresses
+			all_addresses = [pointer.address for entry in self.fragments + self.sized_str_entries for pointer in entry.pointers]
+			# make them unique and sort them
+			sorted_addresses = sorted( set( all_addresses ) )
+			# add the end of the header data block
+			sorted_addresses.append(self.header_size + self.check_header_data_size)
+			# get the size of each fragment: find the next entry's address and substract it from address
+			for entry in self.fragments + self.sized_str_entries:
+				for pointer in entry.pointers:
+					# get the offset of the next entry that points into this buffer
+					ind = sorted_addresses.index(pointer.address) + 1
+					# set data size for this entry
+					pointer.data_size = sorted_addresses[ind] - pointer.address
+
+		def map_pointers(self):
+			"""Assign list of copies to every pointer so they can be updated with the same data easily"""
+			print("\nMapping pointers")
+			# todo ignore pointers with -1
+			# maps address to list of pointers
+			self.pointer_map = {}
+			for entry in self.fragments + self.sized_str_entries:
+				for pointer in entry.pointers:
+					if pointer.address not in self.pointer_map:
+						self.pointer_map[pointer.address] = []
+					self.pointer_map[pointer.address].append(pointer)
+			# for every pointer, store any other pointer that points to the same address
+			for address, pointers in self.pointer_map.items():
+				for p in pointers:
+					p.copies = [po for po in pointers if po != p]
+		
+		def populate_pointers(self):
+			"""Load data for every pointer"""
+			for entry in self.fragments + self.sized_str_entries:
+				for pointer in entry.pointers:
+					pointer.read_data(self)
 			
+		def map_assets(self):
+			"""Store start and stop indices to asset entries, translate hierarchy to sizedstr entries"""
+			# store start and stop asset indices
+			for i, set_entry in enumerate(self.set_header.sets):
+				# for the last entry
+				if i == self.set_header.set_count-1:
+					set_entry.end = self.set_header.asset_count
+				# store start of the next one as this one's end
+				else:
+					set_entry.end = self.set_header.sets[i+1].start
+				# map assets to entry
+				set_entry.assets = self.set_header.assets[set_entry.start : set_entry.end]
+				# print("SET:",set_entry.name)
+				# print("ASSETS:",[a.name for a in set_entry.assets])
+				# store the references on the corresponding sized str entry
+				sized_str_entry = self.find_entry(self.sized_str_entries, set_entry.file_hash, set_entry.ext_hash)
+				sized_str_entry.children = [self.sized_str_entries[a.file_index] for a in set_entry.assets]
+				for child in sized_str_entry.children:
+					child.parent = sized_str_entry
+
+		def map_frags(self):
 			# these are first reversed and then sorted by file type as defined in frag_order
 			sorted_sized_str_entries = []
 			reversed_sized_str_entries = list(reversed(self.sized_str_entries))
@@ -806,22 +881,6 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 
 			}
 			
-			check_header_data_size = self.calc_header_data_size()
-			# calculate fragment data sizes
-			# get all pointers into the header datas, as absolute addresses
-			all_addresses = [pointer.address for entry in self.fragments+self.sized_str_entries for pointer in entry.pointers]
-			# make them unique and sort them
-			sorted_addresses = sorted( set( all_addresses ) )
-			# add the end of the header data block
-			sorted_addresses.append(self.header_size + check_header_data_size)
-			# get the size of each fragment: find the next entry's address and substract it from address
-			for entry in self.fragments+self.sized_str_entries:
-				for pointer in entry.pointers:
-					# get the offset of the next entry that points into this buffer
-					ind = sorted_addresses.index(pointer.address) + 1
-					# set data size for this entry
-					pointer.data_size = sorted_addresses[ind] - pointer.address
-
 			# we go from the end
 			reversed_fragments = list(reversed(self.fragments))
 			address_0_fragments = list(sorted(self.fragments, key=lambda f: f.pointers[0].address))
@@ -861,7 +920,7 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 			# now assign the mdl2 frags to their sized str entry
 			fixed_t = tuple( (2,2) for x in range(5))
 			# go in reversed set entry, forward asset entry order
-			set_entries = reversed(self.set_entries) if "reverse_sets" in self.header.commands else self.set_entries
+			set_entries = reversed(self.set_header.sets) if "reverse_sets" in self.header.commands else self.set_header.sets
 			for set_entry in set_entries:
 				for asset_entry in set_entry.assets:
 					assert(asset_entry.name == asset_entry.entry.name)
@@ -877,9 +936,9 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 						orange_frag = sized_str_entry.fragments[2]
 						orange_frag_count = orange_frag.pointers[1].data_size // 4
 						mats = []
-						stream.seek(orange_frag.pointers[1].address)
+						self.stream.seek(orange_frag.pointers[1].address)
 						for i in range(orange_frag_count):
-							mats.append( self.get_from(Ms2Format.Material1, stream) )
+							mats.append( self.get_from(Ms2Format.Material1, self.stream) )
 						model_indices = [m.model_index for m in mats]
 						sized_str_entry.model_count = max(model_indices) + 1
 
@@ -913,8 +972,14 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 			# for i, s in enumerate(sorted_sized_str_entries):
 				# print(i, s.name, [c.name for c in s.children])
 			# print()
-			
+
+		def map_buffers(self):
+			"""Map buffers to data entries, sort buffers into load order, populate buffers with data"""
 			print("\nMapping buffers")
+
+			# this holds the buffers in the order they are read from the file
+			self.buffers_io_order = []
+			
 			# sequentially attach buffers to data entries by each entry's buffer count
 			buff_ind = 0
 			for i, data in enumerate(self.data_entries):
@@ -927,8 +992,6 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 					data.buffers.append(buffer)
 					buff_ind +=1
 			
-			# this holds the buffers in the order they are read from the file
-			self.buffers_io_order = []
 			# only do this if there are any data entries so that max() doesn't choke 
 			if self.data_entries:
 				# check how many buffers occur at max in one data block
@@ -943,24 +1006,10 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 
 			# finally, we have the buffers in the correct sorting so we can read their contents
 			print("\nReading from buffers")
-			stream.seek(self.header_size + check_header_data_size)
-			for b in self.buffers_io_order:
+			self.stream.seek(self.header_size + self.check_header_data_size)
+			for buffer in self.buffers_io_order:
 				# read buffer data and store it in buffer object
-				b.data = stream.read(b.size)
-				
-				# the rest is just for debugging
-				address = stream.tell()
-				# print("b.index", b.index, "address", address, "b.size", b.size)
-				inter.append( ((address, address+b.size), "buffer for file: "+n ) )
-			
-			# print("\nProcessed intervals in file:")
-			# inter.sort()
-			# for x, name in inter:
-				# # if 310000 < x[0] < 311500:
-				# print(x, name)
-			
-			if "write_frag_log" in self.header.commands:
-				self.write_frag_log()
+				buffer.read_data(self)
 		
 		def write_frag_log(self,):
 			# # this is just for developing to see which unique attributes occur across a list of entries
