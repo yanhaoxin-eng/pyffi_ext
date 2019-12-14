@@ -321,7 +321,11 @@ class Ms2Format(pyffi.object_models.xml.FileFormat):
 						vert_w = [ (self.bone_names[bone_i], w) for bone_i, w in vert.weights ]
 					# fallback: skin parition
 					if not vert_w:
-						vert_w = [ (self.bone_names[vert.bone_index], 1), ]
+						try:
+							# aviary landscape, probably a differnt vert struct
+							vert_w = [ (self.bone_names[vert.bone_index], 1), ]
+						except:
+							pass
 				else:
 					vert_w = []
 				for i, (uv_coord, layer) in enumerate(zip(vert.uvs, self.uv_layers)):
