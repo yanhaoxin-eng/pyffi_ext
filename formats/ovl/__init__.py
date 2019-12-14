@@ -435,7 +435,7 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 				header_reader.seek(self.data_offset)
 				self.data = header_reader.read(self.data_size)
 			
-		def write_data(self, archive):
+		def write_data(self, archive, update_copies=False):
 			"""Load data from archive header data readers into pointer for modification and io"""
 
 			if self.header_index == 4294967295:
@@ -445,6 +445,9 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 				writer = archive.headers_data_io[self.header_index]
 				# update data offset
 				self.data_offset = writer.tell()
+				if update_copies:
+					for other_pointer in self.copies:
+						other_pointer.data_offset = writer.tell()
 				# write data to io, adjusting the cursor for that header
 				writer.write(self.data)
 			
@@ -532,7 +535,7 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 			sorted_first_pointers = [pointers[0] for address, pointers in sorted(self.pointer_map.items()) ]
 			# write updated strings
 			for pointer in sorted_first_pointers:
-				pointer.write_data(self)
+				pointer.write_data(self, update_copies=True)
 
 			# do this first so header entries can be updated
 			header_data_writer = io.BytesIO()
