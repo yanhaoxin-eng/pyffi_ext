@@ -176,8 +176,12 @@ class Ms2Format(pyffi.object_models.xml.FileFormat):
 				print("bone_info_starts",bone_info_starts)
 				
 				if bone_info_starts:
-					bone_info_address = self.eoh + bone_info_starts[self.mdl2_header.index]
-					print("using bone info {} at address {}".format(self.mdl2_header.index, bone_info_address) )
+					idx = self.mdl2_header.index
+					if idx >= len(bone_info_starts):
+						print("reset boneinfo index")
+						idx = 0
+					bone_info_address = self.eoh + bone_info_starts[idx]
+					print("using bone info {} at address {}".format(idx, bone_info_address) )
 					ms2_stream.seek(bone_info_address)
 					self.bone_info = Ms2Format.Ms2BoneInfo()
 					self.bone_info.read(ms2_stream, data=self)

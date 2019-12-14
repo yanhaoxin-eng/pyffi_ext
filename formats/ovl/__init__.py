@@ -477,7 +477,8 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 			return io.BytesIO(self.data)
 
 		def read_as(self, pyffi_cls, data, num=1):
-			"""Return self.data as pyffi cls"""
+			"""Return self.data as pyffi cls
+			Data must be an object that has version & user_version attributes"""
 			reader = self.get_reader()
 			insts = []
 			for i in range(num):
@@ -766,13 +767,14 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 
 		def read_sets_assets(self):
 			"""Read the set header block that defines sets and assets"""
+			print("Reading sets and assets...")
 			self.set_header = OvlFormat.SetHeader()
 			self.set_header.read(self.stream, self)
-			print(self.set_header)
+			# print(self.set_header)
 			# signature check
 			if not (self.set_header.sig_a == 1065336831 and self.set_header.sig_b == 16909320):
 				raise AttributeError("Set header signature check failed!")
-			print("Set Entries")
+			# print("Set Entries")
 			# read all set entries
 			for set_entry in self.set_header.sets:
 				set_entry.name = self.get_name(set_entry)
@@ -964,12 +966,9 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 						# hack: infer the model count from the fragment with material1 data
 						orange_frag = sized_str_entry.fragments[2]
 						orange_frag_count = orange_frag.pointers[1].data_size // 4
-						mats = []
-						print("orange_frag_count",orange_frag_count)
-						self.stream.seek(orange_frag.pointers[1].address)
-						for i in range(orange_frag_count):
-							mats.append( self.get_from(Ms2Format.Material1, self.stream) )
+						mats = orange_frag.pointers[1].read_as(Ms2Format.Material1, self, num = orange_frag_count)
 						model_indices = [m.model_index for m in mats]
+						print("orange_frag_count",orange_frag_count)
 						print(model_indices)
 						if model_indices:
 							sized_str_entry.model_count = max(model_indices) + 1
