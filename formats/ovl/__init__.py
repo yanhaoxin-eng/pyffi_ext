@@ -431,18 +431,18 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 			if self.header_index == 4294967295:
 				self.data = None
 			else:
-				header_reader = archive.headers_data_io[self.header_index]			
+				header_reader = archive.header_entries[self.header_index].data
 				header_reader.seek(self.data_offset)
 				self.data = header_reader.read(self.data_size)
 			
 		def write_data(self, archive, update_copies=False):
-			"""Load data from archive header data readers into pointer for modification and io"""
+			"""Write data to header data, update offset, also for copies if told"""
 
 			if self.header_index == 4294967295:
 				pass
 			else:
-				# get header_data to write into
-				writer = archive.headers_data_io[self.header_index]
+				# get header data to write into
+				writer = archive.header_entries[self.header_index].data
 				# update data offset
 				self.data_offset = writer.tell()
 				if update_copies:
@@ -451,6 +451,18 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 				# write data to io, adjusting the cursor for that header
 				writer.write(self.data)
 			
+		def link_to_header(self, archive):
+			"""Store this pointer in suitable header entry"""
+
+			if self.header_index == 4294967295:
+				pass
+			else:
+				# get header entry
+				entry = archive.header_entries[self.header_index]
+				if self.data_offset not in entry.pointer_map:
+					entry.pointer_map[self.data_offset] = []
+				entry.pointer_map[self.data_offset].append(self)
+
 		def update_data(self, data, update_copies=False):
 			"""Update data and size param"""
 			# todo - enforce modulo padding here?
@@ -526,22 +538,23 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 			return n + "." + e
 		
 		def write_archive(self, stream):
-					
-			# clear io objects
-			self.headers_data_io = list( io.BytesIO() for h in self.header_entries )
-			# maintain sorting order
-			# grab the first pointer for each address
-			# it is assumed that subsequent pointers to that address share the same data
-			sorted_first_pointers = [pointers[0] for address, pointers in sorted(self.pointer_map.items()) ]
-			# write updated strings
-			for pointer in sorted_first_pointers:
-				pointer.write_data(self, update_copies=True)
+
+			for header_entry in self.header_entries:
+				# clear io objects
+				header_entry.data = io.BytesIO()
+				# maintain sorting order
+				# grab the first pointer for each address
+				# it is assumed that subsequent pointers to that address share the same data
+				sorted_first_pointers = [pointers[0] for offset, pointers in sorted(header_entry.pointer_map.items()) ]
+				# write updated strings
+				for pointer in sorted_first_pointers:
+					pointer.write_data(self, update_copies=True)
 
 			# do this first so header entries can be updated
 			header_data_writer = io.BytesIO()
 			# the ugly stuff with all fragments and sizedstr entries
-			for header_entry, header_data in zip(self.header_entries, self.headers_data_io):
-				header_data_bytes = header_data.getvalue()
+			for header_entry in self.header_entries:
+				header_data_bytes = header_entry.data.getvalue()
 				# JWE style
 				if self.header.flag_2 == 24724:
 					header_entry.offset = header_data_writer.tell()
@@ -613,13 +626,14 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 			
 			# go back to header offset
 			stream.seek(self.header_size)
-			# this contains the sizedstr & fragment data
-			self.headers_data_io = list( io.BytesIO( stream.read(h.size) ) for h in self.header_entries )
+			# add IO object to every header_entry
+			for header_entry in self.header_entries:
+				header_entry.data = io.BytesIO( stream.read(header_entry.size) )
 			
 			self.check_header_data_size = self.calc_header_data_size()
+			self.map_pointers()
 			self.calc_pointer_addresses()
 			self.calc_pointer_sizes()
-			self.map_pointers()
 			self.populate_pointers()
 			
 			self.map_frags()
@@ -664,7 +678,8 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 					# print(header_entry)
 					n = self.get_name(header_entry)
 					print("header",n)
-					print("header",header_entry)
+					print("size",header_entry.size)
+					# print("header",header_entry)
 					
 					# todo: can we make use of this again for an improved fragment getter?
 					# # create list if required
@@ -786,35 +801,35 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 		def calc_pointer_sizes(self):
 			"""Assign an estimated size to every pointer"""
 			# calculate pointer data sizes
-			# get all pointers into the header datas, as absolute addresses
-			all_addresses = [pointer.address for entry in self.fragments + self.sized_str_entries for pointer in entry.pointers]
-			# make them unique and sort them
-			sorted_addresses = sorted( set( all_addresses ) )
-			# add the end of the header data block
-			sorted_addresses.append(self.header_size + self.check_header_data_size)
-			# get the size of each fragment: find the next entry's address and substract it from address
-			for entry in self.fragments + self.sized_str_entries:
-				for pointer in entry.pointers:
-					# get the offset of the next entry that points into this buffer
-					ind = sorted_addresses.index(pointer.address) + 1
-					# set data size for this entry
-					pointer.data_size = sorted_addresses[ind] - pointer.address
+			for entry in self.header_entries:
+				# make them unique and sort them
+				sorted_addresses = sorted( set( entry.pointer_map.keys() ) )
+				# add the end of the header data block
+				sorted_addresses.append(entry.size)
+				# get the size of each fragment: find the next entry's address and substract it from address
+				for pointers in entry.pointer_map.values():
+					# todo could optimize using update_copies
+					for pointer in pointers:
+						# get the offset of the next entry that points into this buffer
+						ind = sorted_addresses.index(pointer.data_offset) + 1
+						# set data size for this entry
+						pointer.data_size = sorted_addresses[ind] - pointer.data_offset
 
 		def map_pointers(self):
 			"""Assign list of copies to every pointer so they can be updated with the same data easily"""
 			print("\nMapping pointers")
-			# todo ignore pointers with -1
-			# maps address to list of pointers
-			self.pointer_map = {}
+			# reset pointer map for each header entry
+			for header_entry in self.header_entries:
+				header_entry.pointer_map = {}
+			# append all valid pointers to their respective dicts
 			for entry in self.fragments + self.sized_str_entries:
 				for pointer in entry.pointers:
-					if pointer.address not in self.pointer_map:
-						self.pointer_map[pointer.address] = []
-					self.pointer_map[pointer.address].append(pointer)
-			# for every pointer, store any other pointer that points to the same address
-			for address, pointers in self.pointer_map.items():
-				for p in pointers:
-					p.copies = [po for po in pointers if po != p]
+					pointer.link_to_header(self)
+			for header_entry in self.header_entries:
+				# for every pointer, store any other pointer that points to the same address
+				for offset, pointers in header_entry.pointer_map.items():
+					for p in pointers:
+						p.copies = [po for po in pointers if po != p]
 		
 		def populate_pointers(self):
 			"""Load data for every pointer"""
@@ -950,11 +965,17 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 						orange_frag = sized_str_entry.fragments[2]
 						orange_frag_count = orange_frag.pointers[1].data_size // 4
 						mats = []
+						print("orange_frag_count",orange_frag_count)
 						self.stream.seek(orange_frag.pointers[1].address)
 						for i in range(orange_frag_count):
 							mats.append( self.get_from(Ms2Format.Material1, self.stream) )
 						model_indices = [m.model_index for m in mats]
-						sized_str_entry.model_count = max(model_indices) + 1
+						print(model_indices)
+						if model_indices:
+							sized_str_entry.model_count = max(model_indices) + 1
+						else:
+							print("probably bug from refactoring, found no models")
+							sized_str_entry.model_count = 0
 
 						# todo: remove once CoreModelInfo is implemented
 						# check for empty mdl2s by ensuring that one of the fixed self.fragments has the correct size
@@ -1046,7 +1067,7 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 		
 		def get_header_reader(self, entry, ind=0):
 			p = entry.pointers[ind]
-			header_reader = self.headers_data_io[p.header_index]			
+			header_reader = self.header_entries[p.header_index].data	
 			header_reader.seek(p.data_offset)
 			return header_reader, p.data_size
 		
