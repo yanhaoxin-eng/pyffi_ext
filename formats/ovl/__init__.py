@@ -458,7 +458,18 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 				for other_pointer in self.copies:
 					other_pointer.update_data(data)
 			
-	
+		def get_reader(self):
+			return io.BytesIO(self.data)
+
+		def read_as(self, pyffi_cls, data, num=1):
+			"""Return self.data as pyffi cls"""
+			reader = self.get_reader()
+			insts = []
+			for i in range(num):
+				inst = pyffi_cls()
+				inst.read(reader, data=data)
+				insts.append(inst)
+			return insts
 
 	class Archive(pyffi.object_models.FileFormat.Data):
 		"""A class to contain the actual Ovl data."""
