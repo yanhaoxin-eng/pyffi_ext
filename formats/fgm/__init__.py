@@ -70,6 +70,10 @@ class FgmFormat(pyffi.object_models.xml.FileFormat):
 	ZString = pyffi.object_models.common.ZString
 	
 	class Data(pyffi.object_models.FileFormat.Data):
+		# maps FGM dtype to struct dtype
+		# dtypes = {0:"f", 1:"ff", 2:"fff", 3:"ffff", 4:"I", 5:"i", 6:"i", 8:"I"}
+		dtypes = {0:"f", 1:"ff", 2:"fff", 3:"ffff", 5:"i", 6:"i"}
+
 		"""A class to contain the actual Fgm data."""
 		def __init__(self):
 			self.version = 0
@@ -93,6 +97,12 @@ class FgmFormat(pyffi.object_models.xml.FileFormat):
 			"""
 			pass
 		
+		def write_z_str(self, stream, s):
+			"""get a zero terminated string from stream at pos """
+			z_str = FgmFormat.ZString()
+			z_str.set_value(s.encode())
+			z_str.write(stream, data=self)
+			
 		def read_z_str(self, stream, pos):
 			"""get a zero terminated string from stream at pos """
 			stream.seek( pos )
@@ -101,7 +111,7 @@ class FgmFormat(pyffi.object_models.xml.FileFormat):
 			return str(z_str)
 
 		def read(self, stream, verbose=0, file="", quick=False):
-			"""Read a dds file.
+			"""Read a fgm file.
 
 			:param stream: The stream from which to read.
 			:type stream: ``file``
@@ -115,45 +125,71 @@ class FgmFormat(pyffi.object_models.xml.FileFormat):
 			
 			# read the file
 			self.fgm_header.read(stream, data=self)
+			self.eoh = stream.tell()
 			# print(self.fgm_header)
 					
-			# maps FGM dtype to struct dtype
-			dtypes = {0:"f", 1:"ff", 2:"fff", 3:"ffff", 4:"I", 5:"i", 6:"i", 8:"I"}
-
 			zeros = stream.read(self.fgm_header.zeros_size)
 			
 			data_start = stream.tell()
 			name_start = data_start + self.fgm_header.data_lib_size
-			print(name_start)
-			print("\nShader =", self.read_z_str(stream, name_start))
-			print("\nTextures")
+			self.shader_name = self.read_z_str(stream, name_start)
 			for texture in self.fgm_header.textures:
 				texture.name = self.read_z_str(stream, name_start+texture.offset)
 				texture.value = [x for x in texture.layers]
 				# convert to bool
 				texture.layered = texture.is_layered == 7
+			# read float / bool / int values
+			for attrib in self.fgm_header.attributes:
+				attrib.name = self.read_z_str(stream, name_start+attrib.offset)
+				fmt = self.dtypes[attrib.dtype]
+				stream.seek(data_start + attrib.first_value_offset)
+				attrib.value = list(struct.unpack("<"+fmt, stream.read(struct.calcsize(fmt)) ))
+				if attrib.dtype == 6:
+					attrib.value = list( bool(v) for v in attrib.value )
+			self.print_readable()
+
+		def print_readable(self,):
+			print("\nShader =", self.shader_name)
+			print("\nTextures")
+			for texture in self.fgm_header.textures:
 				l = "(layered)" if texture.layered else ""
 				s = '{} {} = {}'.format(texture.name, l, texture.value)
 				print(s)
-			# read float / bool / int values
+				print(texture)
+				print()
 			print("\nAttributes")
 			for attrib in self.fgm_header.attributes:
-				attrib.name = self.read_z_str(stream, name_start+attrib.offset)
-				fmt = dtypes[attrib.dtype]
-				stream.seek(data_start + attrib.first_value_offset)
-				attrib.value = struct.unpack("<"+fmt, stream.read(struct.calcsize(fmt)) )
-				if attrib.dtype == 6:
-					attrib.value = bool(attrib.value)
 				s = '{} = {}'.format(attrib.name, attrib.value)
 				print(s)
-				
-		def write(self, stream, verbose=0, file=""):
-			"""Write a dds file.
+				print(attrib)
+				print()
+			
+		def write(self, stream, verbose=0):
+			"""Write a fgm file.
 
 			:param stream: The stream to which to write.
-			:type stream: ``file``
 			:param verbose: The level of verbosity.
 			:type verbose: ``int``
 			"""
-			pass
-	
+			
+			names_writer = io.BytesIO()
+			data_writer = io.BytesIO()
+			# shader name is at 0
+			self.write_z_str(names_writer, self.shader_name)
+			# attribs are written first
+			for attrib in self.fgm_header.attributes:
+				attrib.offset = names_writer.tell()
+				self.write_z_str(names_writer, attrib.name)
+				attrib.first_value_offset = data_writer.tell()
+				fmt = self.dtypes[attrib.dtype]
+				b = struct.pack("<"+fmt, *attrib.value )
+				data_writer.write(b)
+			for texture in self.fgm_header.textures:
+				texture.offset = names_writer.tell()
+				self.write_z_str(names_writer, texture.name)
+
+			# write the output stream
+			self.fgm_header.write(stream, data=self)
+			stream.write(b"\x00"*self.fgm_header.zeros_size)
+			stream.write(data_writer.getvalue())
+			stream.write(names_writer.getvalue())

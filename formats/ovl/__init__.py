@@ -933,14 +933,16 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 					sized_str_entry.fragments = self.get_frag_after(address_0_fragments, t, sized_str_entry.pointers[0].address)
 				
 				elif sized_str_entry.ext == "fgm":
-					print(sized_str_entry.name, sized_str_entry.pointers[0].data_size)
-					if sized_str_entry.pointers[0].data_size == 24:
-						fgm_frag_count = 2
-					elif sized_str_entry.pointers[0].data_size == 16:
-						fgm_frag_count = 4
-					t = tuple( (2,2) for x in range(fgm_frag_count))
-					# get and set fragments
-					sized_str_entry.fragments = self.get_frag_after(address_0_fragments, t, sized_str_entry.pointers[0].address)
+					sized_str_entry.fragments = self.get_frag_after_terminator(address_0_fragments, (2,2), sized_str_entry.pointers[0].address)
+				
+					# print(sized_str_entry.name, sized_str_entry.pointers[0].data_size)
+					# if sized_str_entry.pointers[0].data_size == 24:
+					# 	fgm_frag_count = 2
+					# elif sized_str_entry.pointers[0].data_size == 16:
+					# 	fgm_frag_count = 4
+					# t = tuple( (2,2) for x in range(fgm_frag_count))
+					# # get and set fragments
+					# sized_str_entry.fragments = self.get_frag_after(address_0_fragments, t, sized_str_entry.pointers[0].address)
 				
 			# get all fixed fragments, 5 per file
 			t = ( (2,2) for x in range(mdl2_count*5))
@@ -1090,6 +1092,27 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 			header_entry = self.header_entries[header_index]
 			return self.header_size + header_entry.offset + data_offset
 				
+		def get_frag_after_terminator(self, l, h_types, initpos, terminator=24):
+			"""Returns entries of l matching each type tuple in t that have not been processed.
+			t: tuple of (x,y) tuples for each self.fragments header types"""
+			out = []
+			# print("looking for",h_types)
+			for f in l:
+				if f.pointers[0].address >= initpos:
+					# can't add self.fragments that have already been added elsewhere
+					if f.done:
+						continue
+					# print((f.type_0, f.type_1))
+					if h_types == (f.pointers[0].type, f.pointers[1].type):
+						# print(f.data_offset_0,"  ",initpos)
+						f.done = True
+						out.append(f)
+						if f.pointers[0].data_size == terminator:
+							break
+			else:
+				raise AttributeError(f"Could not find a terminator fragment matching header types {h_types} and pointer[0].size {terminator}" )
+			return out
+		
 		def get_frag_after(self, l, t, initpos):
 			"""Returns entries of l matching each type tuple in t that have not been processed.
 			t: tuple of (x,y) tuples for each self.fragments header types"""
