@@ -677,8 +677,10 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 					header_entry.type = header_type.type
 					self.header_entries.append(header_entry)
 					# print(header_entry)
-					n = self.get_name(header_entry)
-					print("header",n)
+					header_entry.name = self.get_name(header_entry)
+					header_entry.basename, header_entry.ext = os.path.splitext(header_entry.name)
+					header_entry.ext = header_entry.ext[1:]
+					print("header",header_entry.name)
 					print("size",header_entry.size)
 					# print("header",header_entry)
 					

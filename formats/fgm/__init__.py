@@ -146,7 +146,7 @@ class FgmFormat(pyffi.object_models.xml.FileFormat):
 				attrib.value = list(struct.unpack("<"+fmt, stream.read(struct.calcsize(fmt)) ))
 				if attrib.dtype == 6:
 					attrib.value = list( bool(v) for v in attrib.value )
-			self.print_readable()
+			# self.print_readable()
 
 		def print_readable(self,):
 			print("\nShader =", self.shader_name)
