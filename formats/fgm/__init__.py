@@ -79,6 +79,17 @@ class FgmFormat(pyffi.object_models.xml.FileFormat):
 			self.version = 0
 			self.fgm_header = FgmFormat.FgmInfoHeader()
 		
+		@property
+		def game(self,):
+			# JWE style
+			if self.fgm_header.flag_2 == 24724:
+				return "Jurassic World Evolution"
+			# PZ Style
+			elif self.fgm_header.flag_2 == 8340:
+				return "Planet Zoo"
+			else:
+				return "Unknown Game"
+		
 		def inspect_quick(self, stream):
 			"""Quickly checks if stream contains DDS data, and gets the
 			version, by looking at the first 8 bytes.

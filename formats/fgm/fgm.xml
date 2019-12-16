@@ -126,16 +126,14 @@
 		
 		This reads a whole custom FGM file
         <add name="magic" type="byte" arr1="4">'FGM '</add>
+        <add name="version" type="uint" ></add>
+        <add name="flag 2" type="uint" ></add>
         <add name="num frags" type="uint" >fragment count</add>
         <add name="tex info size" type="uint" >byte count to check for quirks</add>
         <add name="attr info size" type="uint" >byte count to check for quirks</add>
         <add name="zeros size" type="uint" >byte count to check for quirks</add>
         <add name="data lib size" type="uint" >byte count to check for quirks</add>
 
-        <!-- <add name="version" type="uint" ></add>
-        <add name="flag 2" type="uint" ></add>
-        <add name="index" type="uint" >index of this model inside the ms2, used to find bone info</add>
-		 -->
         <!-- <add name="name" type="SizedString" >name of ms2</add> -->
         <add name="fgm info" type="FourFragFgm" ></add>
 		<add name="two frags pad" type="TwoFragFgmExtra" arr1="num frags == 2" ></add>
