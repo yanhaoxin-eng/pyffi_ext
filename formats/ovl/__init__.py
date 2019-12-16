@@ -861,11 +861,77 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 				for child in sized_str_entry.children:
 					child.parent = sized_str_entry
 
+		def collect_matcol(self, sized_str_entry, address_0_fragments):
+			print("\nMATCOL:",sized_str_entry.name)
+			f0 = self.get_frag_after(address_0_fragments, ((4,4),), sized_str_entry.pointers[0].address)[0]
+			# print(f0)
+			#0,0,collection count,0
+			f0_d0 = struct.unpack("<4I", f0.pointers[0].data)
+			#flag (3=variant, 2=layered) , 0
+			has_texture_list_frag = len(f0.pointers[1].data) == 8
+			if has_texture_list_frag:
+				f0_d1 = struct.unpack("<2I", f0.pointers[1].data)
+			else:
+				f0_d1 = struct.unpack("<6I", f0.pointers[1].data)
+			print("f0_d0", f0_d0)
+			print("f0_d1", f0_d1)
+			is_variant = f0_d1[0] == 3
+			is_layered = f0_d1[0] == 2
+			print("has_texture_list_frag",has_texture_list_frag)
+			print("is_variant",is_variant)
+			print("is_layered",is_layered)
+			# print(f1)
+			if has_texture_list_frag:
+				f1 = self.get_frag_after(address_0_fragments, ((4,4),), f0.pointers[1].address)[0]
+				f1_d0 = struct.unpack("<4I", f1.pointers[0].data)
+				print("f1_d0", f1_d0)
+				tex_count = f1_d0[2]
+				print("tex_count",tex_count)
+				for t in range(tex_count):
+					tex_frags = self.get_frag_after(address_0_fragments, ((4,6),(4,6),(4,6)), f1.pointers[1].address)
+					for tex in tex_frags:
+						print(tex.pointers[1].data)
+			
+			# material pointer frag
+			f2 = self.get_frag_after(address_0_fragments, ((4,4),), f0.pointers[1].address)[0]
+			f2_d0 = struct.unpack("<6I", f2.pointers[0].data)
+			print("f2_d0",f2_d0)
+			mat_count = f2_d0[2]
+			print("mat_count",mat_count)
+			if is_variant:
+				for t in range(mat_count):
+					mat_frags = self.get_frag_after(address_0_fragments, ((4,6),), f2.pointers[1].address)
+					for mat in mat_frags:
+						print(mat.pointers[1].data)
+			elif is_layered:
+				for t in range(mat_count):
+					mat_frags = self.get_frag_after(address_0_fragments, ((4,6),(4,4),(4,4)), f2.pointers[1].address)
+					# for mat in mat_frags:
+					m2, m1, m0 = mat_frags
+					print(m0.pointers[1].data)
+					# print(m0.pointers[0].address, m1.pointers[0].address, m2.pointers[0].address)
+					m1_d0 = struct.unpack("<8I", m1.pointers[0].data)
+					m1_info_count = m1_d0[2]
+					print("m1_info_count",m1_info_count)
+					for i in range(m1_info_count):
+						info = self.get_frag_after(address_0_fragments, ((4,6),), m1.pointers[1].address)[0]
+						# 0,0,byte flag,byte flag,byte flag,byte flag,float,float,float,float,0
+						info_d0 = struct.unpack("<2I4B4fI", info.pointers[0].data)
+						print(info.pointers[1].data, info_d0)
+					m2_d0 = struct.unpack("<4I", m2.pointers[0].data)
+					m2_attrib_count = m2_d0[2]
+					print("m2_attrib_count",m2_attrib_count)
+					for i in range(m2_attrib_count):
+						attr = self.get_frag_after(address_0_fragments, ((4,6),), m2.pointers[1].address)[0]
+						# 0,0,byte flag,byte flag,byte flag,byte flag,float,float,float,float,0
+						attr_d0 = struct.unpack("<2I4BI", attr.pointers[0].data)
+						print(attr.pointers[1].data, attr_d0)
+					
 		def map_frags(self):
 			# these are first reversed and then sorted by file type as defined in frag_order
 			sorted_sized_str_entries = []
 			reversed_sized_str_entries = list(reversed(self.sized_str_entries))
-			frag_order = ( "mdl2", "motiongraph", "fgm", "ms2", "banis", "bani", "spl", "manis", "mani", "tex", "txt", "enumnamer", "motiongraphvars", "hier", "lua", "xmlconfig", "assetpkg", "userinterfaceicondata", )
+			frag_order = ( "mdl2", "motiongraph", "fgm", "ms2", "banis", "bani", "spl", "manis", "mani", "tex", "txt", "enumnamer", "motiongraphvars", "hier", "lua", "xmlconfig", "assetpkg", "userinterfaceicondata", "materialcollection")
 			
 			# count mdl2 files
 			ms2_count = 0
@@ -937,15 +1003,8 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 				elif sized_str_entry.ext == "fgm":
 					sized_str_entry.fragments = self.get_frag_after_terminator(address_0_fragments, (2,2), sized_str_entry.pointers[0].address)
 				
-					# print(sized_str_entry.name, sized_str_entry.pointers[0].data_size)
-					# if sized_str_entry.pointers[0].data_size == 24:
-					# 	fgm_frag_count = 2
-					# elif sized_str_entry.pointers[0].data_size == 16:
-					# 	fgm_frag_count = 4
-					# t = tuple( (2,2) for x in range(fgm_frag_count))
-					# # get and set fragments
-					# sized_str_entry.fragments = self.get_frag_after(address_0_fragments, t, sized_str_entry.pointers[0].address)
-				
+				elif sized_str_entry.ext == "materialcollection":
+					self.collect_matcol( sized_str_entry, address_0_fragments)
 			# get all fixed fragments, 5 per file
 			t = ( (2,2) for x in range(mdl2_count*5))
 			# we have no initpos for these as the mdl2 entries have no data offset
