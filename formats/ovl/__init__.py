@@ -861,51 +861,57 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 				for child in sized_str_entry.children:
 					child.parent = sized_str_entry
 
-		def collect_matcol(self, sized_str_entry, address_0_fragments):
-			print("\nMATCOL:",sized_str_entry.name)
-			f0 = self.get_frag_after(address_0_fragments, ((4,4),), sized_str_entry.pointers[0].address)[0]
-			# print(f0)
+		def collect_matcol(self, ss_entry, address_0_fragments):
+			print("\nMATCOL:",ss_entry.name)
+			# Sized string initpos = position of first fragment for matcol
+			ss_entry.fragments = self.get_frag_after(address_0_fragments, ((4,4),), ss_entry.pointers[0].address)
+			ss_entry.f0 = ss_entry.fragments[0]
+			
+			# print(ss_entry.f0)
 			#0,0,collection count,0
-			f0_d0 = struct.unpack("<4I", f0.pointers[0].data)
+			f0_d0 = struct.unpack("<4I", ss_entry.f0.pointers[0].data)
 			#flag (3=variant, 2=layered) , 0
-			has_texture_list_frag = len(f0.pointers[1].data) == 8
-			if has_texture_list_frag:
-				f0_d1 = struct.unpack("<2I", f0.pointers[1].data)
+			ss_entry.has_texture_list_frag = len(ss_entry.f0.pointers[1].data) == 8
+			if ss_entry.has_texture_list_frag:
+				f0_d1 = struct.unpack("<2I", ss_entry.f0.pointers[1].data)
 			else:
-				f0_d1 = struct.unpack("<6I", f0.pointers[1].data)
+				f0_d1 = struct.unpack("<6I", ss_entry.f0.pointers[1].data)
 			print("f0_d0", f0_d0)
 			print("f0_d1", f0_d1)
-			is_variant = f0_d1[0] == 3
-			is_layered = f0_d1[0] == 2
-			print("has_texture_list_frag",has_texture_list_frag)
-			print("is_variant",is_variant)
-			print("is_layered",is_layered)
-			# print(f1)
-			if has_texture_list_frag:
-				f1 = self.get_frag_after(address_0_fragments, ((4,4),), f0.pointers[1].address)[0]
-				f1_d0 = struct.unpack("<4I", f1.pointers[0].data)
-				print("f1_d0", f1_d0)
-				tex_count = f1_d0[2]
+			ss_entry.is_variant = f0_d1[0] == 3
+			ss_entry.is_layered = f0_d1[0] == 2
+			print("has_texture_list_frag",ss_entry.has_texture_list_frag)
+			print("is_variant",ss_entry.is_variant)
+			print("is_layered",ss_entry.is_layered)
+			# print(ss_entry.tex_pointer)
+			if ss_entry.has_texture_list_frag:
+				ss_entry.tex_pointer = self.get_frag_after(address_0_fragments, ((4,4),), ss_entry.f0.pointers[1].address)[0]
+				tex_pointer_d0 = struct.unpack("<4I", ss_entry.tex_pointer.pointers[0].data)
+				print("tex_pointer_d0", tex_pointer_d0)
+				tex_count = tex_pointer_d0[2]
 				print("tex_count",tex_count)
+				ss_entry.tex_frags = []
 				for t in range(tex_count):
-					tex_frags = self.get_frag_after(address_0_fragments, ((4,6),(4,6),(4,6)), f1.pointers[1].address)
-					for tex in tex_frags:
-						print(tex.pointers[1].data)
-			
+					ss_entry.tex_frags += self.get_frag_after(address_0_fragments, ((4,6),(4,6),(4,6)), ss_entry.tex_pointer.pointers[1].address)
+				for tex in ss_entry.tex_frags:
+					print(tex.pointers[1].data)
+			else:
+				ss_entry.tex_pointer = None
 			# material pointer frag
-			f2 = self.get_frag_after(address_0_fragments, ((4,4),), f0.pointers[1].address)[0]
-			f2_d0 = struct.unpack("<6I", f2.pointers[0].data)
-			print("f2_d0",f2_d0)
-			mat_count = f2_d0[2]
+			ss_entry.mat_pointer = self.get_frag_after(address_0_fragments, ((4,4),), ss_entry.f0.pointers[1].address)[0]
+			mat_pointer_d0 = struct.unpack("<6I", ss_entry.mat_pointer.pointers[0].data)
+			print("mat_pointer_d0",mat_pointer_d0)
+			mat_count = mat_pointer_d0[2]
 			print("mat_count",mat_count)
-			if is_variant:
+			ss_entry.mat_frags = []
+			if ss_entry.is_variant:
 				for t in range(mat_count):
-					mat_frags = self.get_frag_after(address_0_fragments, ((4,6),), f2.pointers[1].address)
-					for mat in mat_frags:
-						print(mat.pointers[1].data)
-			elif is_layered:
+					ss_entry.mat_frags += self.get_frag_after(address_0_fragments, ((4,6),), ss_entry.mat_pointer.pointers[1].address)
+				for mat in ss_entry.mat_frags:
+					print(mat.pointers[1].data)
+			elif ss_entry.is_layered:
 				for t in range(mat_count):
-					mat_frags = self.get_frag_after(address_0_fragments, ((4,6),(4,4),(4,4)), f2.pointers[1].address)
+					mat_frags = self.get_frag_after(address_0_fragments, ((4,6),(4,4),(4,4)), ss_entry.mat_pointer.pointers[1].address)
 					# for mat in mat_frags:
 					m2, m1, m0 = mat_frags
 					print(m0.pointers[1].data)
@@ -913,8 +919,12 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 					m1_d0 = struct.unpack("<8I", m1.pointers[0].data)
 					m1_info_count = m1_d0[2]
 					print("m1_info_count",m1_info_count)
+					infos = []
+					attribs = []
 					for i in range(m1_info_count):
 						info = self.get_frag_after(address_0_fragments, ((4,6),), m1.pointers[1].address)[0]
+						
+						infos.append(info)
 						# 0,0,byte flag,byte flag,byte flag,byte flag,float,float,float,float,0
 						info_d0 = struct.unpack("<2I4B4fI", info.pointers[0].data)
 						print(info.pointers[1].data, info_d0)
@@ -923,9 +933,11 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 					print("m2_attrib_count",m2_attrib_count)
 					for i in range(m2_attrib_count):
 						attr = self.get_frag_after(address_0_fragments, ((4,6),), m2.pointers[1].address)[0]
+						attribs.append(attr)
 						# 0,0,byte flag,byte flag,byte flag,byte flag,float,float,float,float,0
 						attr_d0 = struct.unpack("<2I4BI", attr.pointers[0].data)
 						print(attr.pointers[1].data, attr_d0)
+					ss_entry.mat_frags.append((m0, m1, m2, infos, attribs))
 					
 		def map_frags(self):
 			# these are first reversed and then sorted by file type as defined in frag_order
