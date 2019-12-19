@@ -932,10 +932,7 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 						# 0,0,byte flag,byte flag,byte flag,byte flag,float,float,float,float,0
 						info_d0 = struct.unpack("<2I4B4fI", info.pointers[0].data)
 						print(info.pointers[1].data, info_d0)
-					if len(m2.pointers[0].data) == 16:
-						m2_d0 = struct.unpack("<4I", m2.pointers[0].data)
-					elif len(m2.pointers[0].data) == 24:
-						m2_d0 = struct.unpack("<6I", m2.pointers[0].data)
+					m2_d0 = struct.unpack("<4I", m2.pointers[0].data[:16])
 					m2_attrib_count = m2_d0[2]
 					print("m2_attrib_count",m2_attrib_count)
 					for i in range(m2_attrib_count):
