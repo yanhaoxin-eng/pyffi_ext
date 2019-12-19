@@ -922,10 +922,12 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 					m1_info_count = m1_d0[2]
 					print("m1_info_count",m1_info_count)
 					infos = []
+					#infofrags = []
+					#attribsfrags = []
 					attribs = []
 					for i in range(m1_info_count):
-						info = self.get_frag_after(address_0_fragments, ((4,6),), m1.pointers[1].address)[0]
-						
+						#info_frag = self.get_frag_after(address_0_fragments, ((4,6),), m1.pointers[1].address)
+						info = self.get_frag_after2(address_0_fragments, ((4,6),), m1.pointers[1].address, ss_entry.name)[0]
 						infos.append(info)
 						# 0,0,byte flag,byte flag,byte flag,byte flag,float,float,float,float,0
 						info_d0 = struct.unpack("<2I4B4fI", info.pointers[0].data)
@@ -937,7 +939,9 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 					m2_attrib_count = m2_d0[2]
 					print("m2_attrib_count",m2_attrib_count)
 					for i in range(m2_attrib_count):
-						attr = self.get_frag_after(address_0_fragments, ((4,6),), m2.pointers[1].address)[0]
+						#attr_frag = self.get_frag_after(address_0_fragments, ((4,6),), m2.pointers[1].address)
+
+						attr = self.get_frag_after2(address_0_fragments, ((4,6),), m2.pointers[1].address, ss_entry.name)[0]
 						attribs.append(attr)
 						# 0,0,byte flag,byte flag,byte flag,byte flag,float,float,float,float,0
 						attr_d0 = struct.unpack("<2I4BI", attr.pointers[0].data)
