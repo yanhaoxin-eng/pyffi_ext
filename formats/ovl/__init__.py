@@ -885,7 +885,8 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 			print("is_layered",ss_entry.is_layered)
 			# print(ss_entry.tex_pointer)
 			if ss_entry.has_texture_list_frag:
-				ss_entry.tex_pointer = self.get_frag_after(address_0_fragments, ((4,4),), ss_entry.f0.pointers[1].address)[0]
+				ss_entry.tex_pointer_frag = self.get_frag_after(address_0_fragments, ((4,4),), ss_entry.f0.pointers[1].address)
+				ss_entry.tex_pointer = ss_entry.tex_pointer_frag[0]
 				tex_pointer_d0 = struct.unpack("<4I", ss_entry.tex_pointer.pointers[0].data)
 				print("tex_pointer_d0", tex_pointer_d0)
 				tex_count = tex_pointer_d0[2]
@@ -898,7 +899,8 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 			else:
 				ss_entry.tex_pointer = None
 			# material pointer frag
-			ss_entry.mat_pointer = self.get_frag_after(address_0_fragments, ((4,4),), ss_entry.f0.pointers[1].address)[0]
+			ss_entry.mat_pointer_frag = self.get_frag_after(address_0_fragments, ((4,4),), ss_entry.f0.pointers[1].address)
+			ss_entry.mat_pointer = ss_entry.mat_pointer_frag[0]
 			mat_pointer_d0 = struct.unpack("<6I", ss_entry.mat_pointer.pointers[0].data)
 			print("mat_pointer_d0",mat_pointer_d0)
 			mat_count = mat_pointer_d0[2]
@@ -928,7 +930,10 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 						# 0,0,byte flag,byte flag,byte flag,byte flag,float,float,float,float,0
 						info_d0 = struct.unpack("<2I4B4fI", info.pointers[0].data)
 						print(info.pointers[1].data, info_d0)
-					m2_d0 = struct.unpack("<4I", m2.pointers[0].data)
+					if len(m2.pointers[0].data) == 16:
+						m2_d0 = struct.unpack("<4I", m2.pointers[0].data)
+					elif len(m2.pointers[0].data) == 24:
+						m2_d0 = struct.unpack("<6I", m2.pointers[0].data)
 					m2_attrib_count = m2_d0[2]
 					print("m2_attrib_count",m2_attrib_count)
 					for i in range(m2_attrib_count):
@@ -937,7 +942,17 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 						# 0,0,byte flag,byte flag,byte flag,byte flag,float,float,float,float,0
 						attr_d0 = struct.unpack("<2I4BI", attr.pointers[0].data)
 						print(attr.pointers[1].data, attr_d0)
+					for frag in mat_frags:
+						frag.name = ss_entry.name
 					ss_entry.mat_frags.append((m0, m1, m2, infos, attribs))
+			if ss_entry.has_texture_list_frag:
+				for frag in ss_entry.tex_frags + ss_entry.tex_pointer_frag:
+					frag.name = ss_entry.name
+			if ss_entry.is_variant:
+				for frag in ss_entry.mat_frags:
+					frag.name = ss_entry.name
+			for frag in ss_entry.mat_pointer_frag:
+				frag.name = ss_entry.name
 					
 		def map_frags(self):
 			# these are first reversed and then sorted by file type as defined in frag_order
