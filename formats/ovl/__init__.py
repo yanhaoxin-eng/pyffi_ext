@@ -1223,6 +1223,28 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 					raise AttributeError("Could not find a fragment matching header types "+str(h_types) )
 			return list(reversed(out))
 		
+		def get_frag_after2(self, l, t, initpos, name):
+			"""Returns entries of l matching each type tuple in t that have not been processed.
+			t: tuple of (x,y) tuples for each self.fragments header types"""
+			out = []
+			for h_types in t:
+				# print("looking for",h_types)
+				for f in l:
+					if f.pointers[0].address >= initpos:
+						# can't add self.fragments that have already been added elsewhere
+						if f.done:
+							continue
+						# print((f.type_0, f.type_1))
+						if h_types == (f.pointers[0].type, f.pointers[1].type):
+							# print(f.data_offset_0,"  ",initpos)
+							f.done = True
+							f.name = name
+							out.append(f)
+							break
+				else:
+					raise AttributeError("Could not find a fragment matching header types "+str(h_types) )
+			return list(reversed(out))
+		
 		def get_frag2(self, l, t):
 			"""Returns entries of l matching each type tuple in t that have not been processed.
 			t: tuple of (x,y) tuples for each self.fragments header types"""
