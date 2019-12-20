@@ -191,9 +191,9 @@
 
 	<compound name="Texture" >
 		each texture = three fragments of format: data0 = 8 bytes zeros | data1 = null terminating string (scale texture name)
-		<add name="name 0" type="ZString" ></add>
-		<add name="name 1" type="ZString" ></add>    
-		<add name="name 2" type="ZString" ></add>
+		<add name="texture type" type="ZString" ></add>
+		<add name="texture suffix" type="ZString" ></add>    
+		<add name="fgm name" type="ZString" ></add>
     </compound>
 	
 	<compound name="AttributeInfo" >
