@@ -476,14 +476,21 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 					entry.pointer_map[self.data_offset] = []
 				entry.pointer_map[self.data_offset].append(self)
 
-		def update_data(self, data, update_copies=False):
+		def update_data(self, data, update_copies=False, pad_to=None):
 			"""Update data and size param"""
 			self.data = data
+			if pad_to:
+				moduloed = len(self.data) % 8
+				if moduloed:
+					mod_padlen = pad_to - moduloed
+					self.padding = b"\x00" * mod_padlen
+				else:
+					self.padding = b""
 			self.data_size = len(self.data + self.padding)
 			# update other pointers if asked to by the injector
 			if update_copies:
 				for other_pointer in self.copies:
-					other_pointer.update_data(data)
+					other_pointer.update_data(data, pad_to=pad_to)
 			
 		def get_reader(self):
 			return io.BytesIO(self.data)
