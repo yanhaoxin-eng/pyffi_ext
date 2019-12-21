@@ -428,6 +428,7 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 		def read_data(self, archive):
 			"""Load data from archive header data readers into pointer for modification and io"""
 
+			self.padding = b""
 			if self.header_index == 4294967295:
 				self.data = None
 			else:
@@ -449,8 +450,20 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 					for other_pointer in self.copies:
 						other_pointer.data_offset = writer.tell()
 				# write data to io, adjusting the cursor for that header
-				writer.write(self.data)
+				writer.write(self.data + self.padding)
+
+		def strip_zstring_padding(self):
+			"""Move surplus padding into the padding attribute"""
+			# the actual zstring content + end byte
+			data = self.data.split(b"\x00")[0]+b"\x00"
+			# do the split itself
+			self.split_data_padding( len(data) )
 			
+		def split_data_padding(self, cut):
+			"""Move a fixed surplus padding into the padding attribute"""
+			self.padding = self.data[cut:]
+			self.data = self.data[:cut]
+		
 		def link_to_header(self, archive):
 			"""Store this pointer in suitable header entry"""
 
@@ -465,9 +478,8 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 
 		def update_data(self, data, update_copies=False):
 			"""Update data and size param"""
-			# todo - enforce modulo padding here?
 			self.data = data
-			self.data_size = len(data)
+			self.data_size = len(self.data + self.padding)
 			# update other pointers if asked to by the injector
 			if update_copies:
 				for other_pointer in self.copies:
@@ -906,51 +918,50 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 			mat_count = mat_pointer_d0[2]
 			print("mat_count",mat_count)
 			ss_entry.mat_frags = []
-			if ss_entry.is_variant:
-				for t in range(mat_count):
-					ss_entry.mat_frags += self.get_frag_after(address_0_fragments, ((4,6),), ss_entry.mat_pointer.pointers[1].address)
-				for mat in ss_entry.mat_frags:
-					print(mat.pointers[1].data)
-			elif ss_entry.is_layered:
-				for t in range(mat_count):
-					mat_frags = self.get_frag_after(address_0_fragments, ((4,6),(4,4),(4,4)), ss_entry.mat_pointer.pointers[1].address)
-					# for mat in mat_frags:
-					m2, m1, m0 = mat_frags
+			for t in range(mat_count):
+				if ss_entry.is_variant:
+					m0 = self.get_frag_after(address_0_fragments, ((4,6),), ss_entry.mat_pointer.pointers[1].address)[0]
 					print(m0.pointers[1].data)
-					# print(m0.pointers[0].address, m1.pointers[0].address, m2.pointers[0].address)
-					m1_d0 = struct.unpack("<8I", m1.pointers[0].data)
-					m1_info_count = m1_d0[2]
-					print("m1_info_count",m1_info_count)
-					infos = []
-					#infofrags = []
-					#attribsfrags = []
-					attribs = []
-					for i in range(m1_info_count):
-						#info_frag = self.get_frag_after(address_0_fragments, ((4,6),), m1.pointers[1].address)
-						info = self.get_frag_after2(address_0_fragments, ((4,6),), m1.pointers[1].address, ss_entry.name)[0]
-						infos.append(info)
-						# 0,0,byte flag,byte flag,byte flag,byte flag,float,float,float,float,0
-						info_d0 = struct.unpack("<2I4B4fI", info.pointers[0].data)
-						print(info.pointers[1].data, info_d0)
-					m2_d0 = struct.unpack("<4I", m2.pointers[0].data[:16])
-					m2_attrib_count = m2_d0[2]
-					print("m2_attrib_count",m2_attrib_count)
-					for i in range(m2_attrib_count):
-						#attr_frag = self.get_frag_after(address_0_fragments, ((4,6),), m2.pointers[1].address)
+					m0.name = ss_entry.name
+					ss_entry.mat_frags.append( (m0,) )
+				elif ss_entry.is_layered:
+					mat_frags = self.get_frag_after(address_0_fragments, ((4,6),(4,4),(4,4)), ss_entry.mat_pointer.pointers[1].address)
 
-						attr = self.get_frag_after2(address_0_fragments, ((4,6),), m2.pointers[1].address, ss_entry.name)[0]
-						attribs.append(attr)
+					m0, info, attrib  = mat_frags
+					m0.pointers[1].strip_zstring_padding()
+					print(m0.pointers[1].data)
+					
+					info_d0 = struct.unpack("<8I", info.pointers[0].data)
+					info_count = info_d0[2]
+					print("info_count", info_count)
+					info.children = []
+					for i in range(info_count):
+						info_child = self.get_frag_after(address_0_fragments, ((4,6),), info.pointers[1].address)[0]
+						info.children.append(info_child)
 						# 0,0,byte flag,byte flag,byte flag,byte flag,float,float,float,float,0
-						attr_d0 = struct.unpack("<2I4BI", attr.pointers[0].data)
-						print(attr.pointers[1].data, attr_d0)
-					for frag in mat_frags:
+						info_child_d0 = struct.unpack("<2I4B4fI", info_child.pointers[0].data)
+						info_child.pointers[1].strip_zstring_padding()
+						print(info_child.pointers[1].data, info_d0)
+					
+					attrib.children = []
+					attrib.pointers[0].split_data_padding(16)
+					attrib_d0 = struct.unpack("<4I", attrib.pointers[0].data)
+					attrib_count = attrib_d0[2]
+					print("attrib_count",attrib_count)
+					for i in range(attrib_count):
+						attr_child = self.get_frag_after(address_0_fragments, ((4,6),), attrib.pointers[1].address)[0]
+						attrib.children.append(attr_child)
+						attr_child_d0 = struct.unpack("<2I4BI", attr_child.pointers[0].data)
+						attr_child.pointers[1].strip_zstring_padding()
+						print(attr_child.pointers[1].data, attr_child_d0)
+					
+					# store names for frag log
+					for frag in mat_frags + info.children + attrib.children:
 						frag.name = ss_entry.name
-					ss_entry.mat_frags.append((m0, m1, m2, infos, attribs))
+					# store frags
+					ss_entry.mat_frags.append( mat_frags )
 			if ss_entry.has_texture_list_frag:
 				for frag in ss_entry.tex_frags + ss_entry.tex_pointer_frag:
-					frag.name = ss_entry.name
-			if ss_entry.is_variant:
-				for frag in ss_entry.mat_frags:
 					frag.name = ss_entry.name
 			for frag in ss_entry.mat_pointer_frag:
 				frag.name = ss_entry.name
@@ -989,7 +1000,7 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 			dic = { 
 					"ms2": ( (2,2), (2,2), (2,2), ),
 					"bani": ( (2,2), ),
-					"tex": ( (3, 3), (3,7), ),
+					"tex": ( (3,7), (3, 3) ),
                     "xmlconfig": ( (2, 2), ),
 					# "txt": ( ),
 					# "enumnamer": ( (4,4), ),
@@ -998,18 +1009,15 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 					"spl": ( (2,2), ),
 					#"mani": (),
 					"manis": (),
-					#"motiongraph": ( ),
-					#"matcol": (),
 					"lua": ( (2,2), (2,2), ), #need to figure out load order still
 					"assetpkg": ( (4,6), ), #need to figure out load order still
                     "userinterfaceicondata": ( (4,6), (4,6), ),
 					#"world": will be a variable length one with a 4,4; 4,6; then another variable length 4,6 set : set world before assetpkg in order
-					#"fdb": (), 
+					
 
 			}
 			
 			# we go from the end
-			reversed_fragments = list(reversed(self.fragments))
 			address_0_fragments = list(sorted(self.fragments, key=lambda f: f.pointers[0].address))
 			for frag in self.fragments:
 				if (self.header.flag_2 == 24724 and frag.pointers[0].data_size == 64 and frag.pointers[1].data_size == 48) \
@@ -1221,29 +1229,7 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 							break
 				else:
 					raise AttributeError("Could not find a fragment matching header types "+str(h_types) )
-			return list(reversed(out))
-		
-		def get_frag_after2(self, l, t, initpos, name):
-			"""Returns entries of l matching each type tuple in t that have not been processed.
-			t: tuple of (x,y) tuples for each self.fragments header types"""
-			out = []
-			for h_types in t:
-				# print("looking for",h_types)
-				for f in l:
-					if f.pointers[0].address >= initpos:
-						# can't add self.fragments that have already been added elsewhere
-						if f.done:
-							continue
-						# print((f.type_0, f.type_1))
-						if h_types == (f.pointers[0].type, f.pointers[1].type):
-							# print(f.data_offset_0,"  ",initpos)
-							f.done = True
-							f.name = name
-							out.append(f)
-							break
-				else:
-					raise AttributeError("Could not find a fragment matching header types "+str(h_types) )
-			return list(reversed(out))
+			return out
 		
 		def get_frag2(self, l, t):
 			"""Returns entries of l matching each type tuple in t that have not been processed.

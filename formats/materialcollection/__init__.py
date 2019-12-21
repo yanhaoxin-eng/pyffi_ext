@@ -35,11 +35,8 @@
 #
 # ***** END LICENSE BLOCK *****
 
-import struct
 import os
 import re
-import io
-import math
 
 import pyffi.object_models.xml
 import pyffi.object_models.common
@@ -70,22 +67,19 @@ class MaterialcollectionFormat(pyffi.object_models.xml.FileFormat):
 	ZString = pyffi.object_models.common.ZString
 	
 	class Data(pyffi.object_models.FileFormat.Data):
-		# maps MATERIALCOLLECTION dtype to struct dtype
-		# dtypes = {0:"f", 1:"ff", 2:"fff", 3:"ffff", 4:"I", 5:"i", 6:"i", 8:"I"}
-		dtypes = {0:"f", 1:"ff", 2:"fff", 3:"ffff", 5:"i", 6:"i"}
 
 		"""A class to contain the actual Materialcollection data."""
 		def __init__(self):
 			self.version = 0
-			self.materialcollection_header = MaterialcollectionFormat.MaterialcollectionInfoHeader()
+			self.header = MaterialcollectionFormat.MaterialcollectionInfoHeader()
 		
 		@property
 		def game(self,):
 			# JWE style
-			if self.materialcollection_header.flag_2 == 24724:
+			if self.header.flag_2 == 24724:
 				return "Jurassic World Evolution"
 			# PZ Style
-			elif self.materialcollection_header.flag_2 == 8340:
+			elif self.header.flag_2 == 8340:
 				return "Planet Zoo"
 			else:
 				return "Unknown Game"
@@ -107,56 +101,18 @@ class MaterialcollectionFormat(pyffi.object_models.xml.FileFormat):
 			:type stream: file
 			"""
 			pass
-		
-		def write_z_str(self, stream, s):
-			"""get a zero terminated string from stream at pos """
-			z_str = MaterialcollectionFormat.ZString()
-			z_str.set_value(s.encode())
-			z_str.write(stream, data=self)
 			
-		def read_z_str(self, stream, pos):
-			"""get a zero terminated string from stream at pos """
-			stream.seek( pos )
-			z_str = MaterialcollectionFormat.ZString()
-			z_str.read(stream, data=self)
-			return str(z_str)
-
-		def read(self, stream, verbose=0, file="", quick=False):
+		def read(self, stream, verbose=0):
 			"""Read a materialcollection file.
 
 			:param stream: The stream from which to read.
-			:type stream: ``file``
 			"""
-			# store file name for later
-			if file:
-				self.file = file
-				self.dir, self.basename = os.path.split(file)
-				self.file_no_ext = os.path.splitext(self.file)[0]
 			# self.inspect_quick(stream)
 			
 			# read the file
-			self.materialcollection_header.read(stream, data=self)
-			print(self.materialcollection_header)
-					
-					
-			# self.print_readable()
+			self.header.read(stream, data=self)
+			# print(self.header)
 
-		# def print_readable(self,):
-		# 	print("\nShader =", self.shader_name)
-		# 	print("\nTextures")
-		# 	for texture in self.materialcollection_header.textures:
-		# 		l = "(layered)" if texture.layered else ""
-		# 		s = '{} {} = {}'.format(texture.name, l, texture.value)
-		# 		print(s)
-		# 		print(texture)
-		# 		print()
-		# 	print("\nAttributes")
-		# 	for attrib in self.materialcollection_header.attributes:
-		# 		s = '{} = {}'.format(attrib.name, attrib.value)
-		# 		print(s)
-		# 		print(attrib)
-		# 		print()
-			
 		def write(self, stream, verbose=0):
 			"""Write a materialcollection file.
 
@@ -164,5 +120,4 @@ class MaterialcollectionFormat(pyffi.object_models.xml.FileFormat):
 			:param verbose: The level of verbosity.
 			:type verbose: ``int``
 			"""
-			
-			pass
+			self.header.write(stream, data=self)
