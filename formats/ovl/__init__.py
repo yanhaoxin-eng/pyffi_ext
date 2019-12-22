@@ -792,6 +792,7 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 			# read all set entries
 			for set_entry in self.set_header.sets:
 				set_entry.name = self.get_name(set_entry)
+				set_entry.entry = self.find_entry(self.sized_str_entries, set_entry.file_hash, set_entry.ext_hash)
 			for asset_entry in self.set_header.assets:
 				asset_entry.name = self.get_name(asset_entry)
 				asset_entry.entry = self.sized_str_entries[asset_entry.file_index]
@@ -868,10 +869,9 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 				# print("SET:",set_entry.name)
 				# print("ASSETS:",[a.name for a in set_entry.assets])
 				# store the references on the corresponding sized str entry
-				sized_str_entry = self.find_entry(self.sized_str_entries, set_entry.file_hash, set_entry.ext_hash)
-				sized_str_entry.children = [self.sized_str_entries[a.file_index] for a in set_entry.assets]
-				for child in sized_str_entry.children:
-					child.parent = sized_str_entry
+				set_entry.entry.children = [self.sized_str_entries[a.file_index] for a in set_entry.assets]
+				for child in set_entry.entry.children:
+					child.parent = set_entry.entry
 
 		def collect_matcol(self, ss_entry, address_0_fragments):
 			print("\nMATCOL:",ss_entry.name)
@@ -966,36 +966,15 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 			for frag in ss_entry.mat_pointer_frag:
 				frag.name = ss_entry.name
 					
-		def collect_mdl2(self, sized_str_entry, address_0_fragments):
-			sized_str_entry.fragments = self.get_mdl2frag(address_0_fragments, (2,2), 5)
+		def collect_mdl2(self, sized_str_entry, address_0_fragments, model_info):
 			print("Collecting model fragments for",sized_str_entry.name)
-			
-			# todo: get model count from CoreModelInfo
-			# but that needs to get the first one from the ms2
-			
-			# hack: infer the model count from the fragment with material1 data
-			orange_frag = sized_str_entry.fragments[2]
-			orange_frag_count = orange_frag.pointers[1].data_size // 4
-			mats = orange_frag.pointers[1].read_as(Ms2Format.Material1, self, num = orange_frag_count)
-			model_indices = [m.model_index for m in mats]
-			print("orange_frag_count",orange_frag_count)
-			print(model_indices)
-			if model_indices:
-				sized_str_entry.model_count = max(model_indices) + 1
-			else:
-				print("probably bug from refactoring, found no models")
-				sized_str_entry.model_count = 0
-
-			# todo: remove once CoreModelInfo is implemented
-			# check for empty mdl2s by ensuring that one of the fixed self.fragments has the correct size
-			yellow_frag = sized_str_entry.fragments[3]
-			if yellow_frag.pointers[1].data_size != 64:
-				sized_str_entry.model_count = 0
-				print("No model frags for",sized_str_entry.name)
+			sized_str_entry.fragments = self.get_mdl2frag(address_0_fragments, (2,2), 5)
+			sized_str_entry.model_info = model_info
+			sized_str_entry.model_count = model_info.model_count
 			# get and set fragments
+			print("Num model data frags",sized_str_entry.model_count)
 			sized_str_entry.model_data_frags = self.get_model_data_frags(address_0_fragments, (2,2), sized_str_entry.model_count)
 	
-
 		def map_frags(self):
 			# just reverse is good enough, no longer need to sort them
 			sorted_sized_str_entries = list(reversed(self.sized_str_entries))
@@ -1045,11 +1024,20 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 			# go in reversed set entry, forward asset entry order
 			set_entries = reversed(self.set_header.sets) if "reverse_sets" in self.header.commands else self.set_header.sets
 			for set_entry in set_entries:
-				for asset_entry in set_entry.assets:
-					assert(asset_entry.name == asset_entry.entry.name)
-					sized_str_entry = asset_entry.entry
-					if sized_str_entry.ext == "mdl2":
-						self.collect_mdl2(sized_str_entry, address_0_fragments)
+				set_sized_str_entry = set_entry.entry
+				if set_sized_str_entry.ext == "ms2":
+					f_1 = set_sized_str_entry.fragments[1]
+					next_model_info = f_1.pointers[1].read_as(Ms2Format.CoreModelInfo, self.header)[0]
+					for asset_entry in set_entry.assets:
+						assert(asset_entry.name == asset_entry.entry.name)
+						sized_str_entry = asset_entry.entry
+						if sized_str_entry.ext == "mdl2":
+							self.collect_mdl2(sized_str_entry, address_0_fragments, next_model_info)
+							pink = sized_str_entry.fragments[4]
+							if (self.header.flag_2 == 24724 and pink.pointers[0].data_size == 144) \
+							or (self.header.flag_2 == 8340  and pink.pointers[0].data_size == 160):
+								next_model_info = pink.pointers[0].read_as(Ms2Format.Mdl2ModelInfo, self.header)[0].info
+							
 			# # for debugging only:
 			for sized_str_entry in sorted_sized_str_entries:
 				for frag in sized_str_entry.model_data_frags + sized_str_entry.fragments:
