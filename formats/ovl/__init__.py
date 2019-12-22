@@ -480,7 +480,7 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 			"""Update data and size param"""
 			self.data = data
 			if pad_to:
-				moduloed = len(self.data) % 8
+				moduloed = len(self.data) % pad_to
 				if moduloed:
 					mod_padlen = pad_to - moduloed
 					self.padding = b"\x00" * mod_padlen
