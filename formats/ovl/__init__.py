@@ -966,25 +966,46 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 			for frag in ss_entry.mat_pointer_frag:
 				frag.name = ss_entry.name
 					
-		def map_frags(self):
-			# these are first reversed and then sorted by file type as defined in frag_order
-			sorted_sized_str_entries = []
-			reversed_sized_str_entries = list(reversed(self.sized_str_entries))
-			frag_order = ( "mdl2", "motiongraph", "fgm", "ms2", "banis", "bani", "spl", "manis", "mani", "tex", "txt", "enumnamer", "motiongraphvars", "hier", "lua", "xmlconfig", "assetpkg", "userinterfaceicondata", "materialcollection")
+		def collect_mdl2(self, sized_str_entry, address_0_fragments):
+			sized_str_entry.fragments = self.get_mdl2frag(address_0_fragments, (2,2), 5)
+			print("Collecting model fragments for",sized_str_entry.name)
 			
-			for ext in frag_order:
-				for sized_str_entry in reversed_sized_str_entries:
-					if sized_str_entry.ext == ext:
-						sorted_sized_str_entries.append(sized_str_entry)
-						# print(sized_str_entry.name)
+			# todo: get model count from CoreModelInfo
+			# but that needs to get the first one from the ms2
+			
+			# hack: infer the model count from the fragment with material1 data
+			orange_frag = sized_str_entry.fragments[2]
+			orange_frag_count = orange_frag.pointers[1].data_size // 4
+			mats = orange_frag.pointers[1].read_as(Ms2Format.Material1, self, num = orange_frag_count)
+			model_indices = [m.model_index for m in mats]
+			print("orange_frag_count",orange_frag_count)
+			print(model_indices)
+			if model_indices:
+				sized_str_entry.model_count = max(model_indices) + 1
+			else:
+				print("probably bug from refactoring, found no models")
+				sized_str_entry.model_count = 0
+
+			# todo: remove once CoreModelInfo is implemented
+			# check for empty mdl2s by ensuring that one of the fixed self.fragments has the correct size
+			yellow_frag = sized_str_entry.fragments[3]
+			if yellow_frag.pointers[1].data_size != 64:
+				sized_str_entry.model_count = 0
+				print("No model frags for",sized_str_entry.name)
+			# get and set fragments
+			sized_str_entry.model_data_frags = self.get_model_data_frags(address_0_fragments, (2,2), sized_str_entry.model_count)
+	
+
+		def map_frags(self):
+			# just reverse is good enough, no longer need to sort them
+			sorted_sized_str_entries = list(reversed(self.sized_str_entries))
+
 			print("\nMapping SizedStr to Fragment")
 			# todo: document more of these type requirements
-			dic = { 
-					"ms2": ( (2,2), (2,2), (2,2), ),
+			dic = { "ms2": ( (2,2), (2,2), (2,2), ),
 					"bani": ( (2,2), ),
 					"tex": ( (3,7), (3, 3) ),
                     "xmlconfig": ( (2, 2), ),
-					# "txt": ( ),
 					# "enumnamer": ( (4,4), ),
 					# "motiongraphvars": ( (4,4), (4,6), (4,6), (4,6), (4,6), (4,6), (4,6), (4,6), ),
 					# "hier": ( (4,6) for x in range(19) ),
@@ -995,18 +1016,15 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 					"assetpkg": ( (4,6), ), #need to figure out load order still
                     "userinterfaceicondata": ( (4,6), (4,6), ),
 					#"world": will be a variable length one with a 4,4; 4,6; then another variable length 4,6 set : set world before assetpkg in order
-					
-
 			}
 			
 			# we go from the start
 			address_0_fragments = list(sorted(self.fragments, key=lambda f: f.pointers[0].address))
+			# mark lod fragments as such
 			for frag in self.fragments:
 				if (self.header.flag_2 == 24724 and frag.pointers[0].data_size == 64 and frag.pointers[1].data_size == 48) \
 				or (self.header.flag_2 == 8340  and frag.pointers[0].data_size == 64 and frag.pointers[1].data_size == 56):
 					frag.lod = True
-					frag.done = True
-					frag.grabbed = False
 			
 			for sized_str_entry in sorted_sized_str_entries:
 				# get fixed fragments
@@ -1023,8 +1041,7 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 					self.collect_matcol( sized_str_entry, address_0_fragments)
 			
 			# second pass: collect model fragments
-			# now assign the mdl2 frags to their sized str entry
-			fixed_t = tuple( (2,2) for x in range(5))
+			# assign the mdl2 frags to their sized str entry
 			# go in reversed set entry, forward asset entry order
 			set_entries = reversed(self.set_header.sets) if "reverse_sets" in self.header.commands else self.set_header.sets
 			for set_entry in set_entries:
@@ -1032,34 +1049,7 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 					assert(asset_entry.name == asset_entry.entry.name)
 					sized_str_entry = asset_entry.entry
 					if sized_str_entry.ext == "mdl2":
-						sized_str_entry.fragments = self.get_mdl2frag(address_0_fragments, (2,2), 5)
-						print("Collecting model fragments for",sized_str_entry.name)
-						
-						# todo: get model count from CoreModelInfo
-						# but that needs to get the first one from the ms2
-						
-						# hack: infer the model count from the fragment with material1 data
-						orange_frag = sized_str_entry.fragments[2]
-						orange_frag_count = orange_frag.pointers[1].data_size // 4
-						mats = orange_frag.pointers[1].read_as(Ms2Format.Material1, self, num = orange_frag_count)
-						model_indices = [m.model_index for m in mats]
-						print("orange_frag_count",orange_frag_count)
-						print(model_indices)
-						if model_indices:
-							sized_str_entry.model_count = max(model_indices) + 1
-						else:
-							print("probably bug from refactoring, found no models")
-							sized_str_entry.model_count = 0
-
-						# todo: remove once CoreModelInfo is implemented
-						# check for empty mdl2s by ensuring that one of the fixed self.fragments has the correct size
-						yellow_frag = sized_str_entry.fragments[3]
-						if yellow_frag.pointers[1].data_size != 64:
-							sized_str_entry.model_count = 0
-							print("No model frags for",sized_str_entry.name)
-						# get and set fragments
-						sized_str_entry.model_data_frags = self.get_model_data_frags(address_0_fragments, (2,2), sized_str_entry.model_count)
-				
+						self.collect_mdl2(sized_str_entry, address_0_fragments)
 			# # for debugging only:
 			for sized_str_entry in sorted_sized_str_entries:
 				for frag in sized_str_entry.model_data_frags + sized_str_entry.fragments:
@@ -1067,19 +1057,7 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 							
 			# for header_i, header_entry in enumerate(self.header_entries):
 				# print("Header {} with unknown count {}".format(header_i, header_entry.num_files))
-				
-			# print("\nFrag map")
-			# frag_lists = (self.fragments, address_0_fragments )
-			# for frag_list in frag_lists:
-				# for i, frag in enumerate(frag_list):
-					# print(i, tuple( (p.address, p.data_size) for p in frag.pointers), frag.name, tuple(p.type for p in frag.pointers))
-				# print("    ")
-			
-			# test mapping of children from set entries to sized str entries
-			# for i, s in enumerate(sorted_sized_str_entries):
-				# print(i, s.name, [c.name for c in s.children])
-			# print()
-
+		
 		def map_buffers(self):
 			"""Map buffers to data entries, sort buffers into load order, populate buffers with data"""
 			print("\nMapping buffers")
@@ -1138,15 +1116,14 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 				f.write(frag_log)
 		
 		def get_frag_after_terminator(self, l, h_types, initpos, terminator=24):
-			"""Returns entries of l matching each type tuple in t that have not been processed.
-			t: tuple of (x,y) tuples for each self.fragments header types"""
+			"""Returns entries of l matching h_types that have not been processed until it reaches a frag of terminator size."""
 			out = []
 			# print("looking for",h_types)
 			for f in l:
+				# can't add self.fragments that have already been added elsewhere
+				if f.done:
+					continue
 				if f.pointers[0].address >= initpos:
-					# can't add self.fragments that have already been added elsewhere
-					if f.done:
-						continue
 					# print((f.type_0, f.type_1))
 					if h_types == (f.pointers[0].type, f.pointers[1].type):
 						# print(f.data_offset_0,"  ",initpos)
@@ -1165,10 +1142,10 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 			for h_types in t:
 				# print("looking for",h_types)
 				for f in l:
+					# can't add self.fragments that have already been added elsewhere
+					if f.done:
+						continue
 					if f.pointers[0].address >= initpos:
-						# can't add self.fragments that have already been added elsewhere
-						if f.done:
-							continue
 						# print((f.type_0, f.type_1))
 						if h_types == (f.pointers[0].type, f.pointers[1].type):
 							# print(f.data_offset_0,"  ",initpos)
@@ -1180,15 +1157,15 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 			return out
 		
 		def get_mdl2frag(self, l, h_types, count):
-			"""Returns entries of l matching h_types that have not been processed.
-			t: tuple of (x,y) tuples for each fragments header types"""
+			"""Returns count entries of l matching h_types that have not been processed."""
 			out = []
 			# print("looking for",h_types)
 			for f in l:
 				if len(out) == count:
 					break
-				# can't add self.fragments that have already been added elsewhere
-				if f.done:
+				# can't add fragments that have already been added elsewhere
+				# also skip lod frags
+				if f.done or f.lod:
 					continue
 				# print((f.type_0, f.type_1))
 				if h_types == (f.pointers[0].type, f.pointers[1].type):
@@ -1200,16 +1177,18 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 			return out
             
 		def get_model_data_frags(self, l, h_types, count):
-			"""Returns entries of l matching each type tuple in t that have not been processed.
-			t: tuple of (x,y) tuples for each self.fragments header types"""
+			"""Returns count entries of l matching h_types that have not been processed."""
 			out = []
 			for f in l:
 				# check length of fragment, grab good ones
 				if len(out) == count:
 					break
-				if f.lod and not f.grabbed:
+				# can't add fragments that have already been added elsewhere
+				if f.done:
+					continue
+				if f.lod:
+					f.done = True
 					out.append(f)
-					f.grabbed = True
 			else:
 				raise AttributeError("Could not find a fragment matching header types "+str(h_types) )
 			return out
