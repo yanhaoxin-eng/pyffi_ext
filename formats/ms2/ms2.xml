@@ -216,10 +216,10 @@
 		<add name="materials 0" type="Material0" arr1="model info\mat count" ></add>
 		<add name="lods" type="LodInfo" arr1="model info\lod count" ></add>
 		<!-- these are aligned to 8, but are 4 bytes long -->
-		<add name="materials 1" type="Material1" arr1="model info\model count" ></add>
-		<add name="materials 1 padding" type="uint" cond="(model info\model count) > 6" arr1="(model info\model count) % 2" ></add>
+		<add name="materials 1" type="Material1" arr1="model info\mat1 count" ></add>
+		<add name="materials 1 padding" type="uint" cond="(model info\mat1 count) > 6" arr1="(model info\mat1 count) % 2" ></add>
 		<!-- <add name="model 0" type="ModelData" cond="(model info\model count) > 0" >always present if it has a model</add> -->
-		<add name="models" type="ModelData" arr1="(model info\zero b)" >only present if there is more than one model in this mdl2</add>
+		<add name="models" type="ModelData" arr1="(model info\model count)" >only present if there is more than one model in this mdl2</add>
 		
     </compound>
 	
@@ -290,8 +290,8 @@
 		
 		<add name="mat count" type="ushort"></add>
 		<add name="lod count" type="ushort"></add>
-		<add name="Model count" type="ushort">count of modeldata fragments for the mdl2 this struct refers to</add>
-		<add name="zero b" type="ushort"></add>
+		<add name="mat1 count" type="ushort"></add>
+		<add name="model count" type="ushort">count of modeldata fragments for the mdl2 this struct refers to</add>
 		<add name="last count" type="ushort"></add>
 		<add name="unk0" type="uint64"></add>	
 		<add name="unk1" type="uint64"></add>	
