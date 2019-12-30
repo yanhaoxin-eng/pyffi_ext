@@ -1,4 +1,4 @@
-﻿# ***** BEGIN LICENSE BLOCK *****
+# ***** BEGIN LICENSE BLOCK *****
 #
 # Copyright (c) 2007-2012, Python File Format Interface
 # All rights reserved.
@@ -233,6 +233,7 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 			for texture_entry in self.header.textures:
 				# nb. 4 unknowns per texture
 				try:
+					texture_entry.name = self.name_hashdict[texture_entry.hash]
 					name = self.name_hashdict[texture_entry.hash]
 				except:
 					# this seems to happen for main.ovl - external textures?
@@ -1007,8 +1008,9 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 			
 			for sized_str_entry in sorted_sized_str_entries:
 				# get fixed fragments
+				print("Collecting fragments for",sized_str_entry.name,sized_str_entry.pointers[0].address)
 				if sized_str_entry.ext in dic:
-					print("Collecting fragments for",sized_str_entry.name,sized_str_entry.pointers[0].address)
+
 					t = dic[sized_str_entry.ext]
 					# get and set fragments
 					sized_str_entry.fragments = self.get_frag_after(address_0_fragments, t, sized_str_entry.pointers[0].address)
