@@ -234,11 +234,9 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 				# nb. 4 unknowns per texture
 				try:
 					texture_entry.name = self.name_hashdict[texture_entry.hash]
-					name = self.name_hashdict[texture_entry.hash]
 				except:
 					# this seems to happen for main.ovl - external textures?
 					texture_entry.name = "bad hash"
-					name = "bad hash"
 				# print(name, texture_entry.unknown_1, texture_entry.unknown_2, texture_entry.unknown_3, texture_entry.unknown_4, texture_entry.unknown_5, texture_entry.unknown_6)#, texture_entry.unknown_7)
 				
 			# print(sorted(set([t.unknown_6 for t in self.header.textures])))
