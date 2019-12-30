@@ -176,7 +176,7 @@
     <compound name="FileEntry" >
         Description of one file in the archive
         <add name="Offset" type="uint">offset in the header's Names block; start offset of zero terminated string</add>
-        <add name="hash" type="uint">this hash is used to retrieve the file name from inside the archive</add>
+        <add name="file hash" type="uint">this hash is used to retrieve the file name from inside the archive</add>
         <add name="unkn0" type="byte" >could be the number of fragments this file is split into; Or the amount of entries that refer to this file</add>
         <add name="unkn1" type="byte" ></add>
         <add name="Extension" type="ushort" >index into 'Extensions' array</add>
@@ -211,7 +211,7 @@
 
     <compound name="TextureEntry" >
         Description of one texture
-        <add name="hash" type="uint">Hash of this texture, for lookup in hash dict.</add>
+        <add name="file hash" type="uint">Hash of this texture, for lookup in hash dict.</add>
         <add name="unknown 1" type="uint" ></add>
         <add name="unknown 2" type="ubyte" ></add>
         <add name="unknown 3" type="ubyte" ></add>

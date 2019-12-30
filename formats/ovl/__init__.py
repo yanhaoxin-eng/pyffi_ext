@@ -210,7 +210,7 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 			for file_entry in self.header.files:
 				# get file name from name table
 				file_name = self.read_z_str(names_reader, file_entry.offset)
-				self.name_hashdict[file_entry.hash] = file_name
+				self.name_hashdict[file_entry.file_hash] = file_name
 				# there seems to be no need for now to link the two
 				file_entry.ext = self.header.mimes[file_entry.extension].ext
 				file_entry.name = file_name
@@ -233,7 +233,7 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 			for texture_entry in self.header.textures:
 				# nb. 4 unknowns per texture
 				try:
-					texture_entry.name = self.name_hashdict[texture_entry.hash]
+					texture_entry.name = self.name_hashdict[texture_entry.file_hash]
 				except:
 					# this seems to happen for main.ovl - external textures?
 					texture_entry.name = "bad hash"
