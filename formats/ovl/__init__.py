@@ -552,16 +552,28 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 		
 		def write_archive(self, stream):
 
-			for header_entry in self.header_entries:
-				# clear io objects
-				header_entry.data = io.BytesIO()
+			for i, header_entry in enumerate(self.header_entries):
 				# maintain sorting order
 				# grab the first pointer for each address
 				# it is assumed that subsequent pointers to that address share the same data
 				sorted_first_pointers = [pointers[0] for offset, pointers in sorted(header_entry.pointer_map.items()) ]
-				# write updated strings
-				for pointer in sorted_first_pointers:
-					pointer.write_data(self, update_copies=True)
+				if sorted_first_pointers:
+					# only known from indominus
+					first_offset = sorted_first_pointers[0].data_offset
+					if first_offset != 0:
+						print(f"Found {first_offset} unaccounted bytes at start of header data {i}")
+						unaccounted_bytes = header_entry.data.getvalue()[:first_offset]
+					else:
+						unaccounted_bytes = b""
+
+					# clear io objects
+					header_entry.data = io.BytesIO()
+					header_entry.data.write(unaccounted_bytes)
+					# write updated strings
+					for pointer in sorted_first_pointers:
+						pointer.write_data(self, update_copies=True)
+				else:
+					print(f"No pointers into header entry {i} - keeping its stock data!")
 
 			# do this first so header entries can be updated
 			header_data_writer = io.BytesIO()
