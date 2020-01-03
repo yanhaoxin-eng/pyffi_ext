@@ -34,7 +34,7 @@
 # POSSIBILITY OF SUCH DAMAGE.
 #
 # ***** END LICENSE BLOCK *****
-
+import itertools
 import struct
 import os
 import re
@@ -48,6 +48,8 @@ from pyffi_ext.formats.dds import DdsFormat
 from pyffi_ext.formats.ms2 import Ms2Format
 from pyffi_ext.formats.bani import BaniFormat
 from pyffi_ext.formats.fgm import FgmFormat
+
+MAX_UINT32 = 4294967295
 
 def djb(s):
 	# calculates DJB hash for string s
@@ -429,7 +431,7 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 			"""Load data from archive header data readers into pointer for modification and io"""
 
 			self.padding = b""
-			if self.header_index == 4294967295:
+			if self.header_index == MAX_UINT32:
 				self.data = None
 			else:
 				header_reader = archive.header_entries[self.header_index].data
@@ -439,7 +441,7 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 		def write_data(self, archive, update_copies=False):
 			"""Write data to header data, update offset, also for copies if told"""
 
-			if self.header_index == 4294967295:
+			if self.header_index == MAX_UINT32:
 				pass
 			else:
 				# get header data to write into
@@ -467,7 +469,7 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 		def link_to_header(self, archive):
 			"""Store this pointer in suitable header entry"""
 
-			if self.header_index == 4294967295:
+			if self.header_index == MAX_UINT32:
 				pass
 			else:
 				# get header entry
@@ -487,12 +489,14 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 				else:
 					self.padding = b""
 			self.data_size = len(self.data + self.padding)
+			# todo - copies now include self, check against it or repeat setting data?
 			# update other pointers if asked to by the injector
 			if update_copies:
 				for other_pointer in self.copies:
 					other_pointer.update_data(data, pad_to=pad_to)
 			
 		def get_reader(self):
+			"""Returns a reader of its data"""
 			return io.BytesIO(self.data)
 
 		def read_as(self, pyffi_cls, data, num=1):
@@ -544,7 +548,6 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 				except:
 					n = "NONAME"
 				try:
-					# e = self.ext_list[entry.ext_hash]
 					e = self.header.name_hashdict[entry.ext_hash]
 				except:
 					e = "UNKNOWN"
@@ -669,18 +672,16 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 		
 		def read_header_types(self):
 			"""Reads a HeaderType struct for the count"""
-			self.header_types = []
+			self.header_types = [OvlFormat.HeaderType() for x in range(self.archive_entry.num_header_types)]
 			# for checks
 			check_header_types = 0
 
 			# read header types
-			print("Header Types")
-			for x in range(self.archive_entry.num_header_types):
-				header_type = OvlFormat.HeaderType()
+			print("Header Types", len(self.header_types))
+			for header_type in self.header_types:
 				header_type.read(self.stream, self)
 				# add this header_type's count to check var
 				check_header_types += header_type.num_headers
-				self.header_types.append(header_type)
 				# print(header_type)
 			
 			# ensure that the sum equals the value specified by the archive_entry
@@ -704,8 +705,11 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 					header_entry.name = self.get_name(header_entry)
 					header_entry.basename, header_entry.ext = os.path.splitext(header_entry.name)
 					header_entry.ext = header_entry.ext[1:]
+					# store fragments per header for faster lookup
+					header_entry.fragments = []
 					print("header",header_entry.name)
 					print("size",header_entry.size)
+					# print("num_files", header_entry.num_files)
 					# print("header",header_entry)
 					
 					# todo: can we make use of this again for an improved fragment getter?
@@ -717,53 +721,39 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 					# headers_by_type[ext_hash].append(header_entry)
 
 		def read_data_entries(self):
-			self.data_entries = []
+			self.data_entries = [OvlFormat.DataEntry() for i in range(self.archive_entry.num_datas)]
 			check_buffer_count = 0
 			# read all data entries
-			print("Data Entries")
-			for i in range(self.archive_entry.num_datas):
-				data_entry = OvlFormat.DataEntry()
+			print("Data Entries", len(self.data_entries))
+			for data_entry in self.data_entries:
 				data_entry.read(self.stream, self)
-				self.data_entries.append(data_entry)
 				check_buffer_count += data_entry.buffer_count
 				
 				data_entry.name = self.get_name(data_entry)
 				print("data",data_entry.name)
 				# print(data_entry)
 				
-			print("Num data_entry Entries",len(self.data_entries))
-			# print("Num header.Num Files",header)
-				
 			if check_buffer_count != self.archive_entry.num_buffers:
 				raise AttributeError("Wrong buffer count (expected "+str(self.archive_entry.num_buffers)+")!")
-			
-			# todo: figure out how barbasol calculates this
-			# aka self.archive_entry.data2_size
-			# if check_data_size_2 != self.archive_entry.size_2:
-				# raise AttributeError("Data size does not match")
 
 		def read_buffer_entries(self):
-			self.buffer_entries = []
-			print("Buffer Entries")
+			self.buffer_entries = [OvlFormat.BufferEntry() for i in range(self.archive_entry.num_buffers)]
+			print("Buffer Entries", len(self.buffer_entries))
 			# read all Buffer entries
-			for i in range(self.archive_entry.num_buffers):
-				buffer_entry = OvlFormat.BufferEntry()
+			for buffer_entry in self.buffer_entries:
 				buffer_entry.read(self.stream, self)
-				self.buffer_entries.append(buffer_entry)
 				# print(buffer_entry)
-			print("Buffers",len(self.buffer_entries))
 
 		def read_sizedstr_entries(self):
-			self.sized_str_entries = []
+			self.sized_str_entries = [OvlFormat.SizedStringEntry() for i in range(self.archive_entry.num_files)]
 			print("SizedString Entries")
 			# read all file entries type b
-			for i in range(self.archive_entry.num_files):
-				sized_str_entry = OvlFormat.SizedStringEntry()
+			for sized_str_entry in self.sized_str_entries:
 				sized_str_entry.read(self.stream, self)
 				sized_str_entry.name = self.get_name(sized_str_entry)
 				sized_str_entry.lower_name = sized_str_entry.name.lower()
-				sized_str_entry.basename, sized_str_entry.ext = os.path.splitext(sized_str_entry.name)
-				sized_str_entry.ext = sized_str_entry.ext[1:]
+				sized_str_entry.basename, ext = os.path.splitext(sized_str_entry.name)
+				sized_str_entry.ext = ext[1:]
 				sized_str_entry.children = []
 				sized_str_entry.parent = None
 				sized_str_entry.fragments = []
@@ -774,21 +764,18 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 				# print("\nSizedString",sized_str_entry.name,sized_str_entry.pointers[0].data_offset,sized_str_entry.header_index)#2476
 				# print(sized_str_entry.data_entry)
 				# print(sized_str_entry)
-				self.sized_str_entries.append(sized_str_entry)
 			print("Num SizedString Entries",len(self.sized_str_entries))
 
 		def read_fragment_entries(self):
-			self.fragments = []
+			self.fragments = [OvlFormat.Fragment() for i in range(self.archive_entry.num_fragments)]
 			print("Fragment Entries")
 			# read all self.fragments
-			for i in range(self.archive_entry.num_fragments):
-				fragment = OvlFormat.Fragment()
+			for fragment in self.fragments:
 				fragment.read(self.stream, self)
 				# we assign these later
 				fragment.done = False
 				fragment.lod = False
 				fragment.name = None
-				self.fragments.append(fragment)
 			print("Num Fragment Entries",len(self.fragments))
 
 		def read_sets_assets(self):
@@ -810,12 +797,13 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 				asset_entry.entry = self.sized_str_entries[asset_entry.file_index]
 			
 		def calc_pointer_addresses(self):
+			print("Calculating pointer addresses")
 			# store absolute read addresses from the start of file
-			for entry in self.fragments + self.sized_str_entries:
+			for entry in itertools.chain(self.fragments, self.sized_str_entries):
 				# for access from start of file
 				for pointer in entry.pointers:
 					# some have max_uint as a header value, what do they refer to
-					if pointer.header_index == 4294967295:
+					if pointer.header_index == MAX_UINT32:
 						# print("Warning: {} has no header index (-1)".format(entry.name))
 						pointer.header = 9999999
 						pointer.type = 9999999
@@ -829,20 +817,19 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 			
 		def calc_pointer_sizes(self):
 			"""Assign an estimated size to every pointer"""
+			print("calculating pointer sizes")
 			# calculate pointer data sizes
 			for entry in self.header_entries:
 				# make them unique and sort them
-				sorted_addresses = sorted( set( entry.pointer_map.keys() ) )
+				sorted_items = sorted( entry.pointer_map.items() )
 				# add the end of the header data block
-				sorted_addresses.append(entry.size)
+				sorted_items.append( (entry.size, None) )
 				# get the size of each fragment: find the next entry's address and substract it from address
-				for pointers in entry.pointer_map.values():
-					# todo could optimize using update_copies
+				for i, (offset, pointers) in enumerate(sorted_items[:-1]):
+					# get the offset of the next entry that points into this buffer, substract this offset
+					data_size = sorted_items[i+1][0] - offset
 					for pointer in pointers:
-						# get the offset of the next entry that points into this buffer
-						ind = sorted_addresses.index(pointer.data_offset) + 1
-						# set data size for this entry
-						pointer.data_size = sorted_addresses[ind] - pointer.data_offset
+						pointer.data_size = data_size
 
 		def map_pointers(self):
 			"""Assign list of copies to every pointer so they can be updated with the same data easily"""
@@ -850,19 +837,23 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 			# reset pointer map for each header entry
 			for header_entry in self.header_entries:
 				header_entry.pointer_map = {}
+			print("\nLinking pointers to header")
 			# append all valid pointers to their respective dicts
-			for entry in self.fragments + self.sized_str_entries:
+			for entry in itertools.chain(self.fragments, self.sized_str_entries):
 				for pointer in entry.pointers:
 					pointer.link_to_header(self)
+			print("\nFinding duplicate pointers")
 			for header_entry in self.header_entries:
 				# for every pointer, store any other pointer that points to the same address
 				for offset, pointers in header_entry.pointer_map.items():
 					for p in pointers:
-						p.copies = [po for po in pointers if po != p]
+						# p.copies = [po for po in pointers if po != p]
+						p.copies = pointers
 		
 		def populate_pointers(self):
 			"""Load data for every pointer"""
-			for entry in self.fragments + self.sized_str_entries:
+			print("Reading data into pointers")
+			for entry in itertools.chain(self.fragments, self.sized_str_entries):
 				for pointer in entry.pointers:
 					pointer.read_data(self)
 			
@@ -988,10 +979,24 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 			sized_str_entry.model_data_frags = self.get_model_data_frags(address_0_fragments, (2,2), sized_str_entry.model_count)
 	
 		def map_frags(self):
+			print("\nMapping SizedStrs to Fragments")
+
+			# we go from the start
+			address_0_fragments = list(sorted(self.fragments, key=lambda f: f.pointers[0].address))
+
 			# just reverse is good enough, no longer need to sort them
 			sorted_sized_str_entries = list(reversed(self.sized_str_entries))
+			for frag in address_0_fragments:
+				# header_index = frag.pointers[0].header_index
+				# print(header_index, header_index != MAX_UINT32)
+				# fragments always have a validheader index
+				self.header_entries[frag.pointers[0].header_index].fragments.append(frag)
 
-			print("\nMapping SizedStr to Fragment")
+				# mark lod fragments as such
+				if (self.header.flag_2 == 24724 and frag.pointers[0].data_size == 64 and frag.pointers[1].data_size == 48) \
+				or (self.header.flag_2 == 8340  and frag.pointers[0].data_size == 64 and frag.pointers[1].data_size == 56):
+					frag.lod = True
+
 			# todo: document more of these type requirements
 			dic = { "ms2": ( (2,2), (2,2), (2,2), ),
 					"bani": ( (2,2), ),
@@ -1001,37 +1006,35 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 					# "motiongraphvars": ( (4,4), (4,6), (4,6), (4,6), (4,6), (4,6), (4,6), (4,6), ),
 					# "hier": ( (4,6) for x in range(19) ),
 					"spl": ( (2,2), ),
-					#"mani": (),
-					"manis": (),
-					"lua": ( (2,2), (2,2), ), #need to figure out load order still
+					"lua": ( (2,2), (2,2), ),
 					"assetpkg": ( (4,6), ), #need to figure out load order still
                     "userinterfaceicondata": ( (4,6), (4,6), ),
 					#"world": will be a variable length one with a 4,4; 4,6; then another variable length 4,6 set : set world before assetpkg in order
 			}
-			
-			# we go from the start
-			address_0_fragments = list(sorted(self.fragments, key=lambda f: f.pointers[0].address))
-			# mark lod fragments as such
-			for frag in self.fragments:
-				if (self.header.flag_2 == 24724 and frag.pointers[0].data_size == 64 and frag.pointers[1].data_size == 48) \
-				or (self.header.flag_2 == 8340  and frag.pointers[0].data_size == 64 and frag.pointers[1].data_size == 56):
-					frag.lod = True
-			
+
 			for sized_str_entry in sorted_sized_str_entries:
 				# get fixed fragments
-				print("Collecting fragments for",sized_str_entry.name,sized_str_entry.pointers[0].address)
+				print("Collecting fragments for",sized_str_entry.name, sized_str_entry.pointers[0].address)
+				hi = sized_str_entry.pointers[0].header_index
+				if hi != MAX_UINT32:
+					frags = self.header_entries[hi].fragments
+				else:
+					frags = address_0_fragments
 				if sized_str_entry.ext in dic:
 
 					t = dic[sized_str_entry.ext]
 					# get and set fragments
-					sized_str_entry.fragments = self.get_frag_after(address_0_fragments, t, sized_str_entry.pointers[0].address)
+					sized_str_entry.fragments = self.get_frag_after(frags, t, sized_str_entry.pointers[0].address)
 				
 				elif sized_str_entry.ext == "fgm":
-					sized_str_entry.fragments = self.get_frag_after_terminator(address_0_fragments, (2,2), sized_str_entry.pointers[0].address)
+					sized_str_entry.fragments = self.get_frag_after_terminator(frags, (2,2), sized_str_entry.pointers[0].address)
 				
 				elif sized_str_entry.ext == "materialcollection":
 					self.collect_matcol( sized_str_entry, address_0_fragments)
-			
+				# print("sizedstr",sized_str_entry.pointers[0].header_index)
+				# print("frags",tuple((f.pointers[0].header_index, f.pointers[1].header_index) for f in sized_str_entry.fragments))
+				# for f in sized_str_entry.fragments:
+				# 	assert(f.pointers[0].header_index == sized_str_entry.pointers[0].header_index)
 			# second pass: collect model fragments
 			# assign the mdl2 frags to their sized str entry
 			# go in reversed set entry, forward asset entry order
