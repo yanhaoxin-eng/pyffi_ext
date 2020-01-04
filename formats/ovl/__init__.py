@@ -72,7 +72,7 @@ def get_sized_bytes(data, pos):
 def get_size(data, pos):
 	"""Returns uint at pos from bytes."""
 	return struct.unpack("<I", data[pos:pos+4])[0]
-	
+
 class OvlFormat(pyffi.object_models.xml.FileFormat):
 	"""This class implements the Ovl format."""
 	xml_file_name = 'ovl.xml'
@@ -876,10 +876,20 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 				for child in set_entry.entry.children:
 					child.parent = set_entry.entry
 
+		def frags_from_pointer(self, p, count):
+			frags = self.frags_for_pointer(p)
+			return self.get_frags_after_count(frags, p.address, count)
+
+		def frags_for_pointer(self, p):
+			return self.header_entries[p.header_index].fragments
+
 		def collect_matcol(self, ss_entry, address_0_fragments):
 			print("\nMATCOL:",ss_entry.name)
+
 			# Sized string initpos = position of first fragment for matcol
-			ss_entry.fragments = self.get_frag_after(address_0_fragments, ((4,4),), ss_entry.pointers[0].address)
+			# input_frags = self.frags_for_pointer(ss_entry.pointers[0])
+			# ss_entry.fragments = self.get_frag_after(input_frags, ((4,4),), ss_entry.pointers[0].address)
+			ss_entry.fragments = self.frags_from_pointer(ss_entry.pointers[0], 1)
 			ss_entry.f0 = ss_entry.fragments[0]
 			
 			# print(ss_entry.f0)
@@ -900,22 +910,26 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 			# print("is_layered",ss_entry.is_layered)
 			# print(ss_entry.tex_pointer)
 			if ss_entry.has_texture_list_frag:
-				ss_entry.tex_pointer_frag = self.get_frag_after(address_0_fragments, ((4,4),), ss_entry.f0.pointers[1].address)
-				ss_entry.tex_pointer = ss_entry.tex_pointer_frag[0]
+				# input_frags = self.frags_for_pointer(ss_entry.f0.pointers[1])
+				# ss_entry.tex_pointer = self.get_frag_after(input_frags, ((4,4),), ss_entry.f0.pointers[1].address)[0]
+				ss_entry.tex_pointer = self.frags_from_pointer(ss_entry.f0.pointers[1], 1)[0]
 				tex_pointer_d0 = struct.unpack("<4I", ss_entry.tex_pointer.pointers[0].data)
 				# print("tex_pointer_d0", tex_pointer_d0)
 				tex_count = tex_pointer_d0[2]
 				# print("tex_count",tex_count)
-				ss_entry.tex_frags = []
-				for t in range(tex_count):
-					ss_entry.tex_frags += self.get_frag_after(address_0_fragments, ((4,6),(4,6),(4,6)), ss_entry.tex_pointer.pointers[1].address)
+				ss_entry.tex_frags = self.frags_from_pointer(ss_entry.tex_pointer.pointers[1], tex_count*3)
+				# ss_entry.tex_frags = []
+				# input_frags = self.frags_for_pointer(ss_entry.tex_pointer.pointers[1])
+				# for t in range(tex_count):
+				# 	ss_entry.tex_frags += self.get_frag_after(input_frags, ((4,6),(4,6),(4,6)), ss_entry.tex_pointer.pointers[1].address)
 				# for tex in ss_entry.tex_frags:
 				# 	print(tex.pointers[1].data)
 			else:
 				ss_entry.tex_pointer = None
 			# material pointer frag
-			ss_entry.mat_pointer_frag = self.get_frag_after(address_0_fragments, ((4,4),), ss_entry.f0.pointers[1].address)
-			ss_entry.mat_pointer = ss_entry.mat_pointer_frag[0]
+			ss_entry.mat_pointer = self.frags_from_pointer(ss_entry.f0.pointers[1], 1)[0]
+			# ss_entry.mat_pointer_frag = self.get_frag_after(address_0_fragments, ((4,4),), ss_entry.f0.pointers[1].address)
+			# ss_entry.mat_pointer = ss_entry.mat_pointer_frag[0]
 			mat_pointer_d0 = struct.unpack("<6I", ss_entry.mat_pointer.pointers[0].data)
 			# print("mat_pointer_d0",mat_pointer_d0)
 			mat_count = mat_pointer_d0[2]
@@ -923,12 +937,14 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 			ss_entry.mat_frags = []
 			for t in range(mat_count):
 				if ss_entry.is_variant:
-					m0 = self.get_frag_after(address_0_fragments, ((4,6),), ss_entry.mat_pointer.pointers[1].address)[0]
+					m0 = self.frags_from_pointer(ss_entry.mat_pointer.pointers[1], 1)[0]
+					# m0 = self.get_frag_after(address_0_fragments, ((4,6),), ss_entry.mat_pointer.pointers[1].address)[0]
 					# print(m0.pointers[1].data)
 					m0.name = ss_entry.name
 					ss_entry.mat_frags.append( (m0,) )
 				elif ss_entry.is_layered:
-					mat_frags = self.get_frag_after(address_0_fragments, ((4,6),(4,4),(4,4)), ss_entry.mat_pointer.pointers[1].address)
+					mat_frags = self.frags_from_pointer(ss_entry.mat_pointer.pointers[1], 3)
+					# mat_frags = self.get_frag_after(address_0_fragments, ((4,6),(4,4),(4,4)), ss_entry.mat_pointer.pointers[1].address)
 
 					m0, info, attrib  = mat_frags
 					m0.pointers[1].strip_zstring_padding()
@@ -937,10 +953,9 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 					info_d0 = struct.unpack("<8I", info.pointers[0].data)
 					info_count = info_d0[2]
 					# print("info_count", info_count)
-					info.children = []
-					for i in range(info_count):
-						info_child = self.get_frag_after(address_0_fragments, ((4,6),), info.pointers[1].address)[0]
-						info.children.append(info_child)
+					info.children = self.frags_from_pointer(info.pointers[1], info_count)
+					for info_child in info.children:
+						# info_child = self.get_frag_after(address_0_fragments, ((4,6),), info.pointers[1].address)[0]
 						# 0,0,byte flag,byte flag,byte flag,byte flag,float,float,float,float,0
 						# info_child_d0 = struct.unpack("<2I4B4fI", info_child.pointers[0].data)
 						info_child.pointers[1].strip_zstring_padding()
@@ -951,9 +966,10 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 					attrib_d0 = struct.unpack("<4I", attrib.pointers[0].data)
 					attrib_count = attrib_d0[2]
 					# print("attrib_count",attrib_count)
-					for i in range(attrib_count):
-						attr_child = self.get_frag_after(address_0_fragments, ((4,6),), attrib.pointers[1].address)[0]
-						attrib.children.append(attr_child)
+					attrib.children = self.frags_from_pointer(attrib.pointers[1], attrib_count)
+					for attr_child in attrib.children:
+						# attr_child = self.get_frag_after(address_0_fragments, ((4,6),), attrib.pointers[1].address)[0]
+						# attrib.children.append(attr_child)
 						# attr_child_d0 = struct.unpack("<2I4BI", attr_child.pointers[0].data)
 						attr_child.pointers[1].strip_zstring_padding()
 						# print(attr_child.pointers[1].data, attr_child_d0)
@@ -964,20 +980,22 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 					# store frags
 					ss_entry.mat_frags.append( mat_frags )
 			if ss_entry.has_texture_list_frag:
-				for frag in ss_entry.tex_frags + ss_entry.tex_pointer_frag:
+				for frag in ss_entry.tex_frags + [ss_entry.tex_pointer,]:
 					frag.name = ss_entry.name
-			for frag in ss_entry.mat_pointer_frag:
+			all_frags = [ss_entry.f0, ss_entry.mat_pointer]
+			for frag in all_frags:
 				frag.name = ss_entry.name
 					
-		def collect_mdl2(self, sized_str_entry, address_0_fragments, model_info):
-			print("Collecting model fragments for",sized_str_entry.name)
-			sized_str_entry.fragments = self.get_mdl2frag(address_0_fragments, (2,2), 5)
-			sized_str_entry.model_info = model_info
-			sized_str_entry.model_count = model_info.model_count
+		def collect_mdl2(self, mdl2_sized_str_entry, frags, model_info, fixed_initpos):
+			print("Collecting model fragments for", mdl2_sized_str_entry.name)
+			mdl2_sized_str_entry.fragments = self.get_frags_after_count(frags, fixed_initpos, 5)
+			mdl2_sized_str_entry.model_info = model_info
+			mdl2_sized_str_entry.model_count = model_info.model_count
+			lod_initpos = mdl2_sized_str_entry.fragments[3].pointers[1].address
 			# get and set fragments
-			print("Num model data frags",sized_str_entry.model_count)
-			sized_str_entry.model_data_frags = self.get_model_data_frags(address_0_fragments, (2,2), sized_str_entry.model_count)
-	
+			print("Num model data frags",mdl2_sized_str_entry.model_count)
+			mdl2_sized_str_entry.model_data_frags = self.get_frags_after_count(frags, lod_initpos, mdl2_sized_str_entry.model_count)
+
 		def map_frags(self):
 			print("\nMapping SizedStrs to Fragments")
 
@@ -991,11 +1009,6 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 				# print(header_index, header_index != MAX_UINT32)
 				# fragments always have a validheader index
 				self.header_entries[frag.pointers[0].header_index].fragments.append(frag)
-
-				# mark lod fragments as such
-				if (self.header.flag_2 == 24724 and frag.pointers[0].data_size == 64 and frag.pointers[1].data_size == 48) \
-				or (self.header.flag_2 == 8340  and frag.pointers[0].data_size == 64 and frag.pointers[1].data_size == 56):
-					frag.lod = True
 
 			# todo: document more of these type requirements
 			dic = { "ms2": ( (2,2), (2,2), (2,2), ),
@@ -1037,9 +1050,7 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 				# 	assert(f.pointers[0].header_index == sized_str_entry.pointers[0].header_index)
 			# second pass: collect model fragments
 			# assign the mdl2 frags to their sized str entry
-			# go in reversed set entry, forward asset entry order
-			set_entries = reversed(self.set_header.sets) if "reverse_sets" in self.header.commands else self.set_header.sets
-			for set_entry in set_entries:
+			for set_entry in self.set_header.sets:
 				set_sized_str_entry = set_entry.entry
 				if set_sized_str_entry.ext == "ms2":
 					f_1 = set_sized_str_entry.fragments[1]
@@ -1048,7 +1059,8 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 						assert(asset_entry.name == asset_entry.entry.name)
 						sized_str_entry = asset_entry.entry
 						if sized_str_entry.ext == "mdl2":
-							self.collect_mdl2(sized_str_entry, address_0_fragments, next_model_info)
+							fixed_initpos = f_1.pointers[1].address
+							self.collect_mdl2(sized_str_entry, address_0_fragments, next_model_info, fixed_initpos)
 							pink = sized_str_entry.fragments[4]
 							if (self.header.flag_2 == 24724 and pink.pointers[0].data_size == 144) \
 							or (self.header.flag_2 == 8340  and pink.pointers[0].data_size == 160):
@@ -1159,49 +1171,31 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 				else:
 					raise AttributeError("Could not find a fragment matching header types "+str(h_types) )
 			return out
-		
-		def get_mdl2frag(self, l, h_types, count):
-			"""Returns count entries of l matching h_types that have not been processed."""
+
+		@staticmethod
+		def get_frags_after_count(frags, initpos, count):
+			"""Returns count entries of frags that have not been processed and occur after initpos."""
 			out = []
-			# print("looking for",h_types)
-			for f in l:
-				if len(out) == count:
-					break
-				# can't add fragments that have already been added elsewhere
-				# also skip lod frags
-				if f.done or f.lod:
-					continue
-				# print((f.type_0, f.type_1))
-				if h_types == (f.pointers[0].type, f.pointers[1].type):
-					f.done = True
-					out.append(f)
-					# print(f.data_offset_0)
-			else:
-				raise AttributeError("Could not find a fragment matching header types "+str(h_types) )
-			return out
-            
-		def get_model_data_frags(self, l, h_types, count):
-			"""Returns count entries of l matching h_types that have not been processed."""
-			out = []
-			for f in l:
+			for f in frags:
 				# check length of fragment, grab good ones
 				if len(out) == count:
 					break
 				# can't add fragments that have already been added elsewhere
 				if f.done:
 					continue
-				if f.lod:
+				if f.pointers[0].address >= initpos:
 					f.done = True
 					out.append(f)
 			else:
-				raise AttributeError("Could not find a fragment matching header types "+str(h_types) )
+				raise AttributeError(f"Could not find {count} fragments after initpos {initpos}")
 			return out
-		
-		def find_entry(self, l, file_hash, ext_hash):
+
+		@staticmethod
+		def find_entry(l, file_hash, ext_hash):
 			""" returns entry from list l whose file hash matches hash, or none"""
 			# try to find it
 			for entry in l:
 				if entry.file_hash == file_hash and entry.ext_hash == ext_hash:
 					return entry
-		
-		
+
+
