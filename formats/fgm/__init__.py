@@ -146,9 +146,13 @@ class FgmFormat(pyffi.object_models.xml.FileFormat):
 			self.shader_name = self.read_z_str(stream, name_start)
 			for texture in self.fgm_header.textures:
 				texture.name = self.read_z_str(stream, name_start+texture.offset)
-				texture.value = list( x for x in texture.layers)
 				# convert to bool
-				texture.layered = texture.is_layered == 7
+				texture.textured = texture.is_textured == 8
+				if texture.textured:
+					texture.value = list( x for x in texture.indices)
+				else:
+					texture.value = list( x for x in texture.colors)
+
 			# read float / bool / int values
 			for attrib in self.fgm_header.attributes:
 				attrib.name = self.read_z_str(stream, name_start+attrib.offset)
@@ -163,7 +167,7 @@ class FgmFormat(pyffi.object_models.xml.FileFormat):
 			print("\nShader =", self.shader_name)
 			print("\nTextures")
 			for texture in self.fgm_header.textures:
-				l = "(layered)" if texture.layered else ""
+				l = "(textured)" if texture.textured else ""
 				s = '{} {} = {}'.format(texture.name, l, texture.value)
 				print(s)
 				print(texture)
@@ -196,9 +200,10 @@ class FgmFormat(pyffi.object_models.xml.FileFormat):
 				b = struct.pack("<"+fmt, *attrib.value )
 				data_writer.write(b)
 			for texture in self.fgm_header.textures:
-				for i in range(len(texture.layers)):
-					# uint - hashes
-					texture.layers[i] = max(0, texture.value[i])
+				if texture.textured:
+					for i in range(len(texture.indices)):
+						# uint - hashes
+						texture.indices[i] = max(0, texture.value[i])
 				texture.offset = names_writer.tell()
 				self.write_z_str(names_writer, texture.name)
 

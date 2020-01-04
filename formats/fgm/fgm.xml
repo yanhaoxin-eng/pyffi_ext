@@ -75,7 +75,15 @@
     <basic name="float" count="0" >
         A standard 32-bit floating point number.
     </basic>
-	
+
+    <compound name="Color" >
+        4 bytes
+        <add name="r" type="ubyte"/>
+        <add name="g" type="ubyte"/>
+        <add name="b" type="ubyte"/>
+        <add name="a" type="ubyte"/>
+    </compound>
+
     <compound name="SizedString">
         A string of given length.
         <field name="Length" type="uint">The string length.</field>
@@ -109,8 +117,9 @@
 	<compound name="TextureInfo" >
 		part of fgm fragment, per texture involved
 		<add name="offset" type="uint" >byte offset to name in fgm buffer</add>
-		<add name="is layered" type="uint">7=yes 8=no</add>
-		<add name="layers" type="uint" arr1="4" >if not layered, first is texture hash, [0,1] can be 4294967295 = uint_max = -1</add>
+		<add name="is textured" type="uint">7=has 2 8=uses texture indices</add>
+		<add name="indices" type="uint" arr1="4" cond="is textured == 8" >stores index into shader and array index of texture</add>
+		<add name="colors" type="Color" arr1="4" cond="is textured == 7" >Stores (usually) 2 rgba colors</add>
     </compound>
 	
 	<compound name="AttributeInfo" >
