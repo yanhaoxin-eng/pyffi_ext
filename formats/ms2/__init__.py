@@ -40,6 +40,8 @@ import os
 import re
 import io
 import math
+import time
+import numpy as np
 
 import pyffi.object_models.xml
 import pyffi.object_models.common
@@ -146,6 +148,7 @@ class Ms2Format(pyffi.object_models.xml.FileFormat):
 			:param stream: The stream from which to read.
 			:type stream: ``file``
 			"""
+			start_time = time.time()
 			# store file name for later
 			if file:
 				self.file = file
@@ -211,6 +214,7 @@ class Ms2Format(pyffi.object_models.xml.FileFormat):
 					print("Couldn't match material -bug?")
 			self.mdl2_header.lod_names = [self.ms2_header.names[lod.strznameidx] for lod in self.mdl2_header.lods]
 			print("lod_names", self.mdl2_header.lod_names)
+			print(f"Done in {time.time()-start_time:.2f} seconds!")
 				
 						
 			
@@ -298,46 +302,118 @@ class Ms2Format(pyffi.object_models.xml.FileFormat):
         # def __init__(self, **kwargs):
             # BasicBase.__init__(self, **kwargs)
             # self.set_value(False)
-			
+
+		def init_arrays(self, count):
+			self.vertex_count = count
+			self.vertices = np.empty( (self.vertex_count, 3), np.float32 )
+			self.normals = np.empty( (self.vertex_count, 3), np.float32 )
+			self.tangents = np.empty( (self.vertex_count, 3), np.float32 )
+			self.uvs = np.empty( (self.vertex_count, 4, 2), np.float32 )
+			self.weights = []
+
 		def read_verts(self, stream, data):
 			# read a vertices of this model
 			stream.seek( self.start_buffer2 + self.vertex_offset )
 			# print("verts offset",stream.tell())
+			dt = np.dtype([
+				("pos", np.uint64),
+				("normal", np.ubyte, (3,)),
+				("unk", np.ubyte),
+				("tangent", np.ubyte, (3,)),
+				("bone index", np.ubyte),
+				("uvs", np.ushort, (4, 2)),
+				("bone ids", np.ubyte, (4,)),
+				("bone weights", np.ubyte, (4,)),
+				("pad", np.uint64),
+			])
+
+			data = np.fromfile(stream, dtype=dt, count=self.vertex_count)
+			self.init_arrays(self.vertex_count)
 			for i in range(self.vertex_count):
-				vert = Ms2Format.PackedVert()
-				vert.read(stream, data=data)
-				vert.base = self.base
-				self.verts.append(vert)
-				self.vertices.append( vert.position )
-				self.normals.append( vert.normal  )
-				self.tangents.append( vert.tangent	)
-				for col_i in range(2):
-					self.colors[col_i].append( vert.colors[col_i] )
+				self.vertices[i] = self.position(data[i]["pos"])
+				self.normals[i] = self.unpack_ubyte_vector(data[i]["normal"])
+				self.tangents[i] = self.unpack_ubyte_vector(data[i]["tangent"])
+				self.uvs[i] = self.unpack_ushort_vector(data[i]["uvs"])
+
 				if self.bone_names:
 					# all (bonename, weight) pairs of this vertex
+					weights = self.get_weights(data[i]["bone ids"], data[i]["bone weights"])
 					if self.flag == 517 or self.flag == 512:
-						vert_w = [ (str(bone_i), w) for bone_i, w in vert.weights ]
+						vert_w = [ (str(bone_i), w) for bone_i, w in weights ]
 					else:
-						vert_w = [ (self.bone_names[bone_i], w) for bone_i, w in vert.weights ]
+						vert_w = [ (self.bone_names[bone_i], w) for bone_i, w in weights ]
 					# fallback: skin parition
 					if not vert_w:
 						try:
 							# aviary landscape, probably a differnt vert struct
-							vert_w = [ (self.bone_names[vert.bone_index], 1), ]
+							vert_w = [ (self.bone_names[data[i]["bone index"]], 1), ]
 						except:
 							pass
 				else:
 					vert_w = []
-				for i, (uv_coord, layer) in enumerate(zip(vert.uvs, self.uv_layers)):
-					# create fur length vgroup
-					if i == 1 and self.flag == 885:
-						vert_w.append( ("fur_length", uv_coord[0] ) )
-						
-					layer.append(uv_coord)
+
+				# create fur length vgroup
+				if self.flag == 885:
+					vert_w.append( ("fur_length", self.uvs[i][1][0] ) )
+
 				# the unknown 0, 128 byte
-				vert_w.append( ("unk0", vert.unk_0/255 ) )
+				vert_w.append( ("unk0", data[i]["unk"]/255 ) )
 				self.weights.append(vert_w)
-		
+
+		@staticmethod
+		def unpack_ushort_vector(vec):
+			return (vec - 32768) / 2048
+
+		@staticmethod
+		def unpack_ubyte_vector(vec):
+			vec = (vec - 128) / 128
+			# swizzle to avoid a matrix multiplication for global axis correction
+			return -vec[0], -vec[2], vec[1]
+
+		@staticmethod
+		def get_weights(bone_ids, bone_weights):
+			return [(i, w / 255) for i, w in zip(bone_ids, bone_weights) if w > 0]
+
+		def position(self, input):
+			"""Unpacks and returns the self.raw_pos uint64"""
+			# print("\nunpacking")
+			# correct for size according to base, relative to 512
+			input = int(input)
+			scale = self.base / 512 / 2048
+			# input = self.raw_pos
+			output = []
+			# print("inp",bin(input))
+			for i in range(3):
+				# print("\nnew coord")
+				# grab the last 20 bits with bitand
+				# bit representation: 0b11111111111111111111
+				twenty_bits = input & 0xFFFFF
+				# print("input", bin(input))
+				# print("twenty_bits = input & 0xFFFFF ", bin(twenty_bits), twenty_bits)
+				input >>= 20
+				# print("input >>= 20", bin(input))
+				# print("1",bin(1))
+				# get the rightmost bit
+				rightmost_bit = input & 1
+				# print("rightmost_bit = input & 1",bin(rightmost_bit))
+				# print(rightmost_bit, twenty_bits)
+				if not rightmost_bit:
+				# when doing this, the output mesh is fine for coords that don't exceed approximately 0.25
+				# if True:
+					# rightmost bit was 0
+					# print("rightmost_bit == 0")
+					# bit representation: 0b100000000000000000000
+					twenty_bits -= 0x100000
+				# print("final int", twenty_bits)
+				o = (twenty_bits + self.base) * scale
+				output.append(o)
+				# shift to skip the sign bit
+				input >>= 1
+			# the inidividual coordinates
+			x,y,z = output
+			# swizzle to avoid a matrix multiplication for global axis correction
+			return (-x,-z,y)
+
 		def write_verts(self, stream, data):
 			for vert in self.verts:
 				vert.write(stream, data)
@@ -391,7 +467,7 @@ class Ms2Format(pyffi.object_models.xml.FileFormat):
 			self.vertices = []
 			self.normals = []
 			self.tangents = []
-			self.uv_layers = ( [], [], [], [] )
+			# self.uv_layers = ( [], [], [], [] )
 			self.colors = ( [], [] )
 			self.weights = []
 			self.read_verts(ms2_stream, self.data)
@@ -495,7 +571,7 @@ class Ms2Format(pyffi.object_models.xml.FileFormat):
 			output= thing3[0]
 			# print("out",bin(output))
 			# return output
-			self.raw_pos = output	
+			self.raw_pos = output
 
 		@property
 		def normal(self,):

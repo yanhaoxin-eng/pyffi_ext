@@ -463,18 +463,5 @@
 		<add name="bone weights" type="ubyte" arr1="4" >4 weights, one for each bone index</add>
 		<add name="colors" type="ByteColor4" arr1="2" >likely</add>
     </compound>
-	
-	<compound name="PackedVert2" >
-		size 48
-		<add name="raw pos" type="uint64"></add>
-		<add name="raw normal" type="UbyteVector3" > </add>
-		<add name="unk 0" type="ubyte" >either 0 or 128, weird shit</add>
-		<add name="raw tangent" type="UbyteVector3" ></add>
-		<add name="bone index" type="ubyte" >points into bone names, index of the bone with most weight (minus rounding/sorting errors), probably a fallback to avoid blended weights</add>
-		<add name="raw uvs" type="UshortVector2" arr1="4" > </add>
-		<add name="bone ids" type="ubyte" arr1="4" >Indexes into the corresponding bone info's bones</add>
-		<add name="bone weights" type="ubyte" arr1="4" >4 weights, one for each bone index</add>
-		<add name="colors" type="ByteColor4" arr1="2" >likely</add>
-    </compound>
 
 </niftoolsxml>
