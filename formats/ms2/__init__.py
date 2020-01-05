@@ -212,12 +212,11 @@ class Ms2Format(pyffi.object_models.xml.FileFormat):
 					model.material = name
 				except:
 					print("Couldn't match material -bug?")
+			# todo - doesn't seem to be correct, at least not for JWE dinos
 			self.mdl2_header.lod_names = [self.ms2_header.names[lod.strznameidx] for lod in self.mdl2_header.lods]
 			print("lod_names", self.mdl2_header.lod_names)
-			print(f"Done in {time.time()-start_time:.2f} seconds!")
-				
-						
-			
+			print(f"Finished reading in {time.time()-start_time:.2f} seconds!")
+
 		def write(self, stream, verbose=0, file=""):
 			"""Write a dds file.
 
@@ -311,10 +310,8 @@ class Ms2Format(pyffi.object_models.xml.FileFormat):
 			self.uvs = np.empty( (self.vertex_count, 4, 2), np.float32 )
 			self.weights = []
 
-		def read_verts(self, stream, data):
-			# read a vertices of this model
-			stream.seek( self.start_buffer2 + self.vertex_offset )
-			# print("verts offset",stream.tell())
+		def get_dtype(self):
+			# todo - get from vert flag
 			dt = np.dtype([
 				("pos", np.uint64),
 				("normal", np.ubyte, (3,)),
@@ -326,14 +323,25 @@ class Ms2Format(pyffi.object_models.xml.FileFormat):
 				("bone weights", np.ubyte, (4,)),
 				("pad", np.uint64),
 			])
+			return dt
 
+		def read_verts(self, stream, data):
+			# read a vertices of this model
+			stream.seek(self.start_buffer2 + self.vertex_offset)
+			# get dtype according to which the vertices are packed
+			dt = self.get_dtype()
+			# read the packed data
 			data = np.fromfile(stream, dtype=dt, count=self.vertex_count)
+			# create arrays for the unpacked data
 			self.init_arrays(self.vertex_count)
+			# first cast to the float uvs array so unpacking doesn't use int division
+			self.uvs[:] = data[:]["uvs"]
+			# unpack uvs
+			self.uvs = (self.uvs - 32768) / 2048
 			for i in range(self.vertex_count):
 				self.vertices[i] = self.position(data[i]["pos"])
 				self.normals[i] = self.unpack_ubyte_vector(data[i]["normal"])
 				self.tangents[i] = self.unpack_ubyte_vector(data[i]["tangent"])
-				self.uvs[i] = self.unpack_ushort_vector(data[i]["uvs"])
 
 				if self.bone_names:
 					# all (bonename, weight) pairs of this vertex
@@ -363,6 +371,7 @@ class Ms2Format(pyffi.object_models.xml.FileFormat):
 		@staticmethod
 		def unpack_ushort_vector(vec):
 			return (vec - 32768) / 2048
+			# return (vec - 32768) / 2048
 
 		@staticmethod
 		def unpack_ubyte_vector(vec):
