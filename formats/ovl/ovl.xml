@@ -156,8 +156,8 @@
 	
     <compound name="ZlibInfo" >
         Description of one zlib archive
-        <add name="Zlib thing1" type="uint">dunno</add>
-        <add name="Zlib thing2" type="uint">subtracting this from ovs uncompressed size to get length of the uncompressed ovs header</add>
+        <add name="Zlib thing1" type="uint">seemingly unused in JWE</add>
+        <add name="Zlib thing2" type="uint">seemingly unused in JWE, subtracting this from ovs uncompressed size to get length of the uncompressed ovs header</add>
     </compound>
 	
     <compound name="MimeEntry" >
@@ -185,23 +185,23 @@
     <compound name="ArchiveEntry" >
         Description of one archive
         <add name="Offset" type="uint">offset in the header's Archive Names block</add>
-        <add name="ovs head offset" type="uint">?</add>
-        <add name="ovs file offset" type="uint">?</add>
+        <add name="ovs head offset" type="uint">starting offset of header entries</add>
+        <add name="ovs file offset" type="uint">starting offset of file entries</add>
         <add name="Num Headers" type="uint" >Total amount of headers in this archive; sum of all HeaderType.num_headers</add>
-        <add name="Num Datas" type="ushort" >?</add>
+        <add name="Num Datas" type="ushort" >Total amount of Data Entries</add>
         <add name="Num Header Types" type="ushort" >Amount of HeaderType objects at start of this deflated archive.</add>
         <add name="zeros" type="uint">?</add>
-        <add name="Num Buffers" type="uint">?</add>
-        <add name="Num Fragments" type="uint" >aka fh6 count</add>
-        <add name="Num Files" type="uint">?</add>
+        <add name="Num Buffers" type="uint">Amount of buffers in the archive</add>
+        <add name="Num Fragments" type="uint" >Amount of Fragments in the archive</add>
+        <add name="Num Files" type="uint">Number of files in the archive</add>
         <add name="read start" type="uint">Seek to pos to get zlib header for this archive</add>
-        <add name="set data size" type="uint" >?</add>
-        <add name="compressed size" type="uint">?</add>
-        <add name="uncompressed size" type="uint" >?</add>
+        <add name="set data size" type="uint" >size of the set and asset entry data</add>
+        <add name="compressed size" type="uint">size of the compressed ovl dat</add>
+        <add name="uncompressed size" type="uint" >size of the uncompressed ovl dat</add>
         <add name="zeros 3" type="uint">?</add>
         <add name="ovs header offset" type="uint">cumulative size of all header datas preceding this archive</add>
-        <add name="header size" type="uint" >?</add>
-        <add name="ovs offset" type="uint" >?</add>
+        <add name="header size" type="uint" >sum of the archives header entry data blocks + the ovs header offset</add>
+        <add name="ovs offset" type="uint" >Seemingly unused, can be zeroed without effect ingame in JWE</add>
     </compound>
 
     <compound name="DirEntry" >
