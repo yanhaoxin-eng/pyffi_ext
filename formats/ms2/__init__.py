@@ -158,7 +158,7 @@ class Ms2Format(pyffi.object_models.xml.FileFormat):
 			
 			# read the file
 			self.mdl2_header.read(stream, data=self)
-			print(self.mdl2_header)
+			# print(self.mdl2_header)
 			
 			# extra stuff
 			self.bone_info = None
@@ -168,7 +168,7 @@ class Ms2Format(pyffi.object_models.xml.FileFormat):
 			self.ms2_path = os.path.join(self.dir, self.mdl2_header.name.decode())
 			with open(self.ms2_path, "rb") as ms2_stream:
 				self.ms2_header.read(ms2_stream, data=self)
-				print(self.ms2_header)
+				# print(self.ms2_header)
 				self.eoh = ms2_stream.tell()
 				# first get all bytes of the whole bone infos block
 				bone_info_bytes = ms2_stream.read(self.ms2_header.bone_info_size)
@@ -229,6 +229,7 @@ class Ms2Format(pyffi.object_models.xml.FileFormat):
 			exp = "export"
 			exp_dir = os.path.join(self.dir, exp)
 			os.makedirs(exp_dir, exist_ok=True)
+			print("Writing verts and tris to temporary buffer")
 			# write each model's vert & tri block to a temporary buffer
 			temp_vert_writer = io.BytesIO()
 			temp_tris_writer = io.BytesIO()
@@ -253,14 +254,14 @@ class Ms2Format(pyffi.object_models.xml.FileFormat):
 			# update lod fragment
 			print("update lod fragment")
 			for lod in self.mdl2_header.lods:
-				print(lod)
+				# print(lod)
 				lod_models = tuple(model for model in self.mdl2_header.models[lod.first_model_index:lod.last_model_index])
-				print(lod_models)
+				# print(lod_models)
 				lod.vertex_count = sum(model.vertex_count for model in lod_models)
 				lod.tri_index_count = sum(model.tri_index_count for model in lod_models)
 				print("lod.vertex_count",lod.vertex_count)
 				print("lod.tri_index_count",lod.tri_index_count)
-				
+			print("Writing final output")
 			# get original header and buffers 0 & 1
 			input_ms2_name = self.mdl2_header.name.decode()
 			self.ms2_path = os.path.join(self.dir, input_ms2_name)
