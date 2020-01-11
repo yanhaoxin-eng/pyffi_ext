@@ -40,6 +40,7 @@ import os
 import re
 import io
 import math
+import numpy as np
 
 import pyffi.object_models.xml
 import pyffi.object_models.common
@@ -165,33 +166,45 @@ class BaniFormat(pyffi.object_models.xml.FileFormat):
 			
 			# todo: check exists
 			
-			# create list of frames for each bone
-			for bone_i in range(self.header.data_1.num_bones):
-				self.bones_frames_eulers.append( [] )
-				self.bones_frames_locs.append( [] )
-			
 			with open(banis_path, 'rb') as banis:
 				# seek to the starting position
 				banis.seek(self.header.data_0.read_start_frame * self.header.data_1.bytes_per_frame)
-				# read frames for this bani from banis buffer
+
+				dt = np.dtype([
+					("euler", np.short, (3,)),
+					("loc", np.ushort, (3,)),
+				])
+
+				ft = np.dtype([
+					("euler", np.float32, (3,)),
+					("loc", np.float32, (3,)),
+				])
+				center = self.header.data_1.translation_center
+				first = self.header.data_1.translation_first
+				self.eulers = np.empty((self.header.data_0.num_frames, self.header.data_1.num_bones, 3), dtype=np.float32)
+				self.locs = np.empty((self.header.data_0.num_frames, self.header.data_1.num_bones, 3), dtype=np.float32)
+				# read the packed data
+				data = np.fromfile(banis, dtype=dt, count=self.header.data_0.num_frames * self.header.data_1.num_bones)
+				data = data.astype(ft)
+				data = data.reshape((self.header.data_0.num_frames, self.header.data_1.num_bones))
 				for frame_i in range(self.header.data_0.num_frames):
 					for bone_i in range(self.header.data_1.num_bones):
-					
-						in_key = BaniFormat.Key()
-						in_key.read(banis, data=self)
-						euler, loc = self.import_key(in_key)
-						
+						e = data[frame_i, bone_i]["euler"]
+						e = (e + 16385) * 180 / 32768
+						e[0] += 90
+						e[2] -= 90
 						# this is irreversible, fixing gimbal issues in baked anims; game fixes these as well and does not mind our fix
-						if self.bones_frames_eulers[bone_i]:
+						if frame_i:
 							# get previous euler for this bone
-							last_euler = self.bones_frames_eulers[bone_i][-1]
+							last_euler = self.eulers[frame_i-1, bone_i]
 							for key_i in range(3):
 								# found weird axis cross, correct for it
-								if abs(euler[key_i]-last_euler[key_i]) > 45:
-									euler[key_i] = math.copysign((180-euler[key_i]), last_euler[key_i])
-							
-						self.bones_frames_eulers[bone_i].append( euler )
-						self.bones_frames_locs[bone_i].append( loc )
+								if abs(e[key_i]-last_euler[key_i]) > 45:
+									e[key_i] = math.copysign((180-e[key_i]), last_euler[key_i])
+						self.eulers[frame_i, bone_i] = e
+
+						l = data[frame_i, bone_i]["loc"]
+						self.locs[frame_i, bone_i] = np.interp(l, (0, 65535), (first, center-first))
 					
 		def import_key(self, key):
 			# calculate degrees
