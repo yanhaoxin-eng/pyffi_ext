@@ -46,21 +46,6 @@ import pyffi.object_models.xml
 import pyffi.object_models.common
 import pyffi.object_models
 
-def make_interpolater(left_min, left_max, right_min, right_max): 
-    # Figure out how 'wide' each range is  
-    leftSpan = left_max - left_min  
-    rightSpan = right_max - right_min  
-
-    # Compute the scale factor between left and right values 
-    scaleFactor = float(rightSpan) / float(leftSpan) 
-
-    # create interpolation function using pre-calculated scaleFactor
-    def interp_fn(value):
-        return right_min + (value-left_min)*scaleFactor
-
-    return interp_fn
-
-
 def export_key(key):
 
 	# this seems to be a modulo equivalent
@@ -154,7 +139,6 @@ class BaniFormat(pyffi.object_models.xml.FileFormat):
 			# create function for doing interpolation of the desired ranges
 			center = self.header.data_1.translation_center
 			first = self.header.data_1.translation_first
-			self.scaler = make_interpolater(0, 65535, first, center-first)
 			
 			# read banis array according to bani header
 			self.read_banis()
@@ -205,20 +189,7 @@ class BaniFormat(pyffi.object_models.xml.FileFormat):
 
 						l = data[frame_i, bone_i]["loc"]
 						self.locs[frame_i, bone_i] = np.interp(l, (0, 65535), (first, center-first))
-					
-		def import_key(self, key):
-			# calculate degrees
-			e = [(x+16385)*180/32768 for x in (key.euler.x, key.euler.y, key.euler.z)]
-			e[0]+=90
-			e[2]-=90
-			# this seems to be a modulo equivalent
-			for i in range(3):
-				if e[i] > 180:
-					e[i]-= 360
 
-			l = [self.scaler(x) for x in (key.translation.x, key.translation.y, key.translation.z)]
-			return e, l
-			
 		def encode_eulers(self,):
 			
 			# todo: update array size
