@@ -142,7 +142,7 @@ class Ms2Format(pyffi.object_models.xml.FileFormat):
 			finally:
 				stream.seek(pos)
 		
-		def read(self, stream, verbose=0, file="", quick=False):
+		def read(self, stream, verbose=0, file="", quick=False, map_bytes=False):
 			"""Read a dds file.
 
 			:param stream: The stream from which to read.
@@ -177,7 +177,7 @@ class Ms2Format(pyffi.object_models.xml.FileFormat):
 				# there's 8 bytes before this
 				bone_info_starts = list( x-8 for x in findall(bone_info_marker, bone_info_bytes) )
 				print("bone_info_starts",bone_info_starts)
-				
+
 				if bone_info_starts:
 					idx = self.mdl2_header.index
 					if idx >= len(bone_info_starts):
@@ -203,7 +203,12 @@ class Ms2Format(pyffi.object_models.xml.FileFormat):
 				if not quick:
 					for model in self.mdl2_header.models:
 						model.populate(self, ms2_stream, self.start_buffer2, self.bone_names, base)
-									
+
+				if map_bytes:
+					for model in self.mdl2_header.models:
+						model.read_bytes_map(self.start_buffer2, ms2_stream)
+					return
+
 			# set material links
 			for mat_1 in self.mdl2_header.materials_1:
 				try:
@@ -299,9 +304,21 @@ class Ms2Format(pyffi.object_models.xml.FileFormat):
 	
 	class ModelData:
 		
-        # def __init__(self, **kwargs):
-            # BasicBase.__init__(self, **kwargs)
-            # self.set_value(False)
+		# def __init__(self, **kwargs):
+			# BasicBase.__init__(self, **kwargs)
+			# self.set_value(False)
+
+		def read_bytes_map(self,  start_buffer2, stream):
+			"""Used to document byte usage of different vertex formats"""
+			# read a vertices of this model
+			stream.seek(start_buffer2 + self.vertex_offset)
+			# read the packed data
+			data = np.fromfile(stream, dtype=np.ubyte, count=self.size_of_vertex * self.vertex_count)
+			data = data.reshape((self.vertex_count, self.size_of_vertex ))
+			self.bytes_map = np.max(data, axis=0)
+			if self.size_of_vertex != 48:
+				raise AttributeError(f"size_of_vertex != 48: size_of_vertex {self.size_of_vertex}, flag {self.flag}", )
+			# print(self.size_of_vertex, self.flag, self.bytes_map)
 
 		def init_arrays(self, count):
 			self.vertex_count = count
@@ -487,9 +504,9 @@ class Ms2Format(pyffi.object_models.xml.FileFormat):
 			
 	class PackedVert:
 		base = 512
-        # def __init__(self, **kwargs):
-            # BasicBase.__init__(self, **kwargs)
-            # self.set_value(False)
+		# def __init__(self, **kwargs):
+			# BasicBase.__init__(self, **kwargs)
+			# self.set_value(False)
 		
 		
 		def unpack_ushort_vector(self, vec):
@@ -643,4 +660,3 @@ class Ms2Format(pyffi.object_models.xml.FileFormat):
 			# yield self.x
 			# yield self.y
 			# yield self.z
-            
