@@ -422,6 +422,7 @@ class Ms2Format(pyffi.object_models.xml.FileFormat):
 				vert_w = []
 				if self.bone_names:
 					if "bone ids" in dt.fields:
+						weights = self.get_weights(data[i]["bone ids"], data[i]["bone weights"])
 						vert_w = [(self.bone_names[bone_i], w) for bone_i, w in weights]
 					# fallback: skin parition
 					if not vert_w:
