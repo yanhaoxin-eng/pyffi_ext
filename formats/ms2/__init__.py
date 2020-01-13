@@ -325,8 +325,11 @@ class Ms2Format(pyffi.object_models.xml.FileFormat):
 			self.vertices = np.empty( (self.vertex_count, 3), np.float32 )
 			self.normals = np.empty( (self.vertex_count, 3), np.float32 )
 			self.tangents = np.empty( (self.vertex_count, 3), np.float32 )
-			uv_shape = dt["uvs"].shape
-			self.uvs = np.empty( (self.vertex_count, *uv_shape), np.float32 )
+			try:
+				uv_shape = dt["uvs"].shape
+				self.uvs = np.empty( (self.vertex_count, *uv_shape), np.float32 )
+			except:
+				self.uvs = None
 			try:
 				colors_shape = dt["colors"].shape
 				self.colors = np.empty( (self.vertex_count, *colors_shape), np.float32 )
@@ -361,6 +364,24 @@ class Ms2Format(pyffi.object_models.xml.FileFormat):
 					("colors", np.ubyte, (1, 4)),
 					("zeros2", np.int32, (1,))
 				])
+			elif self.flag == 513:
+				dt.extend([
+					("uvs", np.ushort, (1, 2)),
+					("colors", np.ubyte, (1, 4)),
+					("zeros2", np.uint64, (3,))
+				])
+			# ???
+			elif self.flag == 512:
+				dt.extend([
+					("uvs", np.ushort, (1, 2)),
+					("colors", np.ubyte, (7, 4)),
+				])
+			# ???
+			elif self.flag == 517:
+				dt.extend([
+					("uvs", np.ushort, (1, 2)),
+					("colors", np.ubyte, (7, 4)),
+				])
 
 			# bone weights
 			if self.flag in (529, 533, 885, 565):
@@ -370,9 +391,8 @@ class Ms2Format(pyffi.object_models.xml.FileFormat):
 					("zeros1", np.uint64)
 				])
 			rt_dt = np.dtype(dt)
-			# assert (rt_dt.itemsize == self.size_of_vertex)
 			if rt_dt.itemsize != self.size_of_vertex:
-				print("Vertex size is wrong", rt_dt.itemsize, self.size_of_vertex, self.flag)
+				raise AttributeError(f"Vertex size for flag {self.flag} is wrong! Collected {rt_dt.itemsize}, got {self.size_of_vertex}")
 			return rt_dt
 
 		def read_verts(self, stream, data):
@@ -385,9 +405,10 @@ class Ms2Format(pyffi.object_models.xml.FileFormat):
 			# create arrays for the unpacked data
 			self.init_arrays(self.vertex_count, dt)
 			# first cast to the float uvs array so unpacking doesn't use int division
-			self.uvs[:] = data[:]["uvs"]
-			# unpack uvs
-			self.uvs = (self.uvs - 32768) / 2048
+			if self.uvs is not None:
+				self.uvs[:] = data[:]["uvs"]
+				# unpack uvs
+				self.uvs = (self.uvs - 32768) / 2048
 			if self.colors is not None:
 				# first cast to the float colors array so unpacking doesn't use int division
 				self.colors[:] = data[:]["colors"]
@@ -397,29 +418,21 @@ class Ms2Format(pyffi.object_models.xml.FileFormat):
 				self.normals[i] = self.unpack_ubyte_vector(data[i]["normal"])
 				self.tangents[i] = self.unpack_ubyte_vector(data[i]["tangent"])
 
-				if self.bone_names and "bone ids" in dt.fields:
-					# all (bonename, weight) pairs of this vertex
-					weights = self.get_weights(data[i]["bone ids"], data[i]["bone weights"])
-					if self.flag == 517 or self.flag == 512:
-						vert_w = [ (str(bone_i), w) for bone_i, w in weights ]
-					else:
-						vert_w = [ (self.bone_names[bone_i], w) for bone_i, w in weights ]
+				# stores all (bonename, weight) pairs of this vertex
+				vert_w = []
+				if self.bone_names:
+					if "bone ids" in dt.fields:
+						vert_w = [(self.bone_names[bone_i], w) for bone_i, w in weights]
 					# fallback: skin parition
 					if not vert_w:
-						try:
-							# aviary landscape, probably a differnt vert struct
-							vert_w = [ (self.bone_names[data[i]["bone index"]], 1), ]
-						except:
-							pass
-				else:
-					vert_w = []
+						vert_w = [(self.bone_names[data[i]["bone index"]], 1), ]
 
 				# create fur length vgroup
 				if self.flag == 885:
-					vert_w.append( ("fur_length", self.uvs[i][1][0] ) )
+					vert_w.append(("fur_length", self.uvs[i][1][0]))
 
 				# the unknown 0, 128 byte
-				vert_w.append( ("unk0", data[i]["unk"]/255 ) )
+				vert_w.append(("unk0", data[i]["unk"]/255))
 				self.weights.append(vert_w)
 
 		@staticmethod
