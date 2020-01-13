@@ -321,18 +321,20 @@ class Ms2Format(pyffi.object_models.xml.FileFormat):
 			# print(self.size_of_vertex, self.flag, self.bytes_map)
 
 		def init_arrays(self, count, dt):
-			# uv_count = dt["uvs"]
-			# print(dt.shape, )
-			uv_shape = dt["uvs"].shape
 			self.vertex_count = count
 			self.vertices = np.empty( (self.vertex_count, 3), np.float32 )
 			self.normals = np.empty( (self.vertex_count, 3), np.float32 )
 			self.tangents = np.empty( (self.vertex_count, 3), np.float32 )
+			uv_shape = dt["uvs"].shape
 			self.uvs = np.empty( (self.vertex_count, *uv_shape), np.float32 )
+			try:
+				colors_shape = dt["colors"].shape
+				self.colors = np.empty( (self.vertex_count, *colors_shape), np.float32 )
+			except:
+				self.colors = None
 			self.weights = []
 
 		def get_dtype(self):
-			# todo - get from vert flag
 			# basic shared stuff
 			dt = [
 				("pos", np.uint64),
@@ -355,20 +357,23 @@ class Ms2Format(pyffi.object_models.xml.FileFormat):
 			elif self.flag == 533:
 				dt.extend([
 					("uvs", np.ushort, (1, 2)),
-					("zeros0", np.int32, (1,))
+					("zeros0", np.int32, (1,)),
 					("colors", np.ubyte, (1, 4)),
 					("zeros2", np.int32, (1,))
 				])
 
 			# bone weights
-			if self.flag in (529, 885, 565):
+			if self.flag in (529, 533, 885, 565):
 				dt.extend([
 					("bone ids", np.ubyte, (4,)),
 					("bone weights", np.ubyte, (4,)),
 					("zeros1", np.uint64)
 				])
-
-			return np.dtype(dt)
+			rt_dt = np.dtype(dt)
+			# assert (rt_dt.itemsize == self.size_of_vertex)
+			if rt_dt.itemsize != self.size_of_vertex:
+				print("Vertex size is wrong", rt_dt.itemsize, self.size_of_vertex, self.flag)
+			return rt_dt
 
 		def read_verts(self, stream, data):
 			# read a vertices of this model
@@ -383,12 +388,16 @@ class Ms2Format(pyffi.object_models.xml.FileFormat):
 			self.uvs[:] = data[:]["uvs"]
 			# unpack uvs
 			self.uvs = (self.uvs - 32768) / 2048
+			if self.colors is not None:
+				# first cast to the float colors array so unpacking doesn't use int division
+				self.colors[:] = data[:]["colors"]
+				self.colors /= 255
 			for i in range(self.vertex_count):
 				self.vertices[i] = self.position(data[i]["pos"])
 				self.normals[i] = self.unpack_ubyte_vector(data[i]["normal"])
 				self.tangents[i] = self.unpack_ubyte_vector(data[i]["tangent"])
 
-				if self.bone_names:
+				if self.bone_names and "bone ids" in dt.fields:
 					# all (bonename, weight) pairs of this vertex
 					weights = self.get_weights(data[i]["bone ids"], data[i]["bone weights"])
 					if self.flag == 517 or self.flag == 512:
