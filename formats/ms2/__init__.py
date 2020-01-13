@@ -320,28 +320,55 @@ class Ms2Format(pyffi.object_models.xml.FileFormat):
 				raise AttributeError(f"size_of_vertex != 48: size_of_vertex {self.size_of_vertex}, flag {self.flag}", )
 			# print(self.size_of_vertex, self.flag, self.bytes_map)
 
-		def init_arrays(self, count):
+		def init_arrays(self, count, dt):
+			# uv_count = dt["uvs"]
+			# print(dt.shape, )
+			uv_shape = dt["uvs"].shape
 			self.vertex_count = count
 			self.vertices = np.empty( (self.vertex_count, 3), np.float32 )
 			self.normals = np.empty( (self.vertex_count, 3), np.float32 )
 			self.tangents = np.empty( (self.vertex_count, 3), np.float32 )
-			self.uvs = np.empty( (self.vertex_count, 4, 2), np.float32 )
+			self.uvs = np.empty( (self.vertex_count, *uv_shape), np.float32 )
 			self.weights = []
 
 		def get_dtype(self):
 			# todo - get from vert flag
-			dt = np.dtype([
+			# basic shared stuff
+			dt = [
 				("pos", np.uint64),
 				("normal", np.ubyte, (3,)),
 				("unk", np.ubyte),
 				("tangent", np.ubyte, (3,)),
 				("bone index", np.ubyte),
-				("uvs", np.ushort, (4, 2)),
-				("bone ids", np.ubyte, (4,)),
-				("bone weights", np.ubyte, (4,)),
-				("pad", np.uint64),
-			])
-			return dt
+				]
+			# uv variations
+			if self.flag == 529:
+				dt.extend([
+					("uvs", np.ushort, (1, 2)),
+					("zeros0", np.int32, (3,))
+				])
+			elif self.flag in (885, 565):
+				dt.extend([
+					("uvs", np.ushort, (3, 2)),
+					("zeros0", np.int32, (1,))
+				])
+			elif self.flag == 533:
+				dt.extend([
+					("uvs", np.ushort, (1, 2)),
+					("zeros0", np.int32, (1,))
+					("colors", np.ubyte, (1, 4)),
+					("zeros2", np.int32, (1,))
+				])
+
+			# bone weights
+			if self.flag in (529, 885, 565):
+				dt.extend([
+					("bone ids", np.ubyte, (4,)),
+					("bone weights", np.ubyte, (4,)),
+					("zeros1", np.uint64)
+				])
+
+			return np.dtype(dt)
 
 		def read_verts(self, stream, data):
 			# read a vertices of this model
@@ -351,7 +378,7 @@ class Ms2Format(pyffi.object_models.xml.FileFormat):
 			# read the packed data
 			data = np.fromfile(stream, dtype=dt, count=self.vertex_count)
 			# create arrays for the unpacked data
-			self.init_arrays(self.vertex_count)
+			self.init_arrays(self.vertex_count, dt)
 			# first cast to the float uvs array so unpacking doesn't use int division
 			self.uvs[:] = data[:]["uvs"]
 			# unpack uvs
