@@ -320,24 +320,35 @@ class Ms2Format(pyffi.object_models.xml.FileFormat):
 				raise AttributeError(f"size_of_vertex != 48: size_of_vertex {self.size_of_vertex}, flag {self.flag}", )
 			# print(self.size_of_vertex, self.flag, self.bytes_map)
 
-		def init_arrays(self, count, dt):
+		def init_arrays(self, count):
 			self.vertex_count = count
 			self.vertices = np.empty( (self.vertex_count, 3), np.float32 )
 			self.normals = np.empty( (self.vertex_count, 3), np.float32 )
 			self.tangents = np.empty( (self.vertex_count, 3), np.float32 )
 			try:
-				uv_shape = dt["uvs"].shape
+				uv_shape = self.dt["uvs"].shape
 				self.uvs = np.empty( (self.vertex_count, *uv_shape), np.float32 )
 			except:
 				self.uvs = None
 			try:
-				colors_shape = dt["colors"].shape
+				colors_shape = self.dt["colors"].shape
 				self.colors = np.empty( (self.vertex_count, *colors_shape), np.float32 )
 			except:
 				self.colors = None
 			self.weights = []
 
-		def get_dtype(self):
+		def get_vcol_count(self,):
+			if "colors" in self.dt.fields:
+				return self.dt["colors"].shape[0]
+			return 0
+
+		def get_uv_count(self,):
+			if "uvs" in self.dt.fields:
+				return self.dt["uvs"].shape[0]
+			return 0
+
+		def update_dtype(self):
+			"""Update ModelData.dt (numpy dtype) according to ModelData.flag"""
 			# basic shared stuff
 			dt = [
 				("pos", np.uint64),
@@ -390,56 +401,58 @@ class Ms2Format(pyffi.object_models.xml.FileFormat):
 					("bone weights", np.ubyte, (4,)),
 					("zeros1", np.uint64)
 				])
-			rt_dt = np.dtype(dt)
-			if rt_dt.itemsize != self.size_of_vertex:
-				raise AttributeError(f"Vertex size for flag {self.flag} is wrong! Collected {rt_dt.itemsize}, got {self.size_of_vertex}")
-			return rt_dt
+			self.dt = np.dtype(dt)
+			if self.dt.itemsize != self.size_of_vertex:
+				raise AttributeError(f"Vertex size for flag {self.flag} is wrong! Collected {self.dt.itemsize}, got {self.size_of_vertex}")
 
 		def read_verts(self, stream, data):
 			# read a vertices of this model
 			stream.seek(self.start_buffer2 + self.vertex_offset)
 			# get dtype according to which the vertices are packed
-			dt = self.get_dtype()
+			self.update_dtype()
 			# read the packed data
-			data = np.fromfile(stream, dtype=dt, count=self.vertex_count)
+			self.verts_data = np.fromfile(stream, dtype=self.dt, count=self.vertex_count)
 			# create arrays for the unpacked data
-			self.init_arrays(self.vertex_count, dt)
+			self.init_arrays(self.vertex_count)
 			# first cast to the float uvs array so unpacking doesn't use int division
 			if self.uvs is not None:
-				self.uvs[:] = data[:]["uvs"]
+				self.uvs[:] = self.verts_data[:]["uvs"]
 				# unpack uvs
 				self.uvs = (self.uvs - 32768) / 2048
 			if self.colors is not None:
 				# first cast to the float colors array so unpacking doesn't use int division
-				self.colors[:] = data[:]["colors"]
+				self.colors[:] = self.verts_data[:]["colors"]
 				self.colors /= 255
 			for i in range(self.vertex_count):
-				self.vertices[i] = self.position(data[i]["pos"])
-				self.normals[i] = self.unpack_ubyte_vector(data[i]["normal"])
-				self.tangents[i] = self.unpack_ubyte_vector(data[i]["tangent"])
+				self.vertices[i] = self.unpack_longint_vec(self.verts_data[i]["pos"])
+				self.normals[i] = self.unpack_ubyte_vector(self.verts_data[i]["normal"])
+				self.tangents[i] = self.unpack_ubyte_vector(self.verts_data[i]["tangent"])
 
 				# stores all (bonename, weight) pairs of this vertex
 				vert_w = []
 				if self.bone_names:
-					if "bone ids" in dt.fields:
-						weights = self.get_weights(data[i]["bone ids"], data[i]["bone weights"])
+					if "bone ids" in self.dt.fields:
+						weights = self.get_weights(self.verts_data[i]["bone ids"], self.verts_data[i]["bone weights"])
 						vert_w = [(self.bone_names[bone_i], w) for bone_i, w in weights]
 					# fallback: skin parition
 					if not vert_w:
-						vert_w = [(self.bone_names[data[i]["bone index"]], 1), ]
+						try:
+							vert_w = [(self.bone_names[self.verts_data[i]["bone index"]], 1), ]
+						except IndexError:
+							# aviary landscape
+							vert_w = [(str(self.verts_data[i]["bone index"]), 1), ]
 
 				# create fur length vgroup
 				if self.flag == 885:
 					vert_w.append(("fur_length", self.uvs[i][1][0]))
 
 				# the unknown 0, 128 byte
-				vert_w.append(("unk0", data[i]["unk"]/255))
+				vert_w.append(("unk0", self.verts_data[i]["unk"]/255))
 				self.weights.append(vert_w)
 
 		@staticmethod
 		def unpack_ushort_vector(vec):
 			return (vec - 32768) / 2048
-			# return (vec - 32768) / 2048
 
 		@staticmethod
 		def unpack_ubyte_vector(vec):
@@ -448,10 +461,20 @@ class Ms2Format(pyffi.object_models.xml.FileFormat):
 			return -vec[0], -vec[2], vec[1]
 
 		@staticmethod
+		def pack_ushort_vector(vec):
+			return [min(int(round(coord * 2048 + 32768)), 65535) for coord in vec]
+
+		@staticmethod
+		def pack_ubyte_vector(vec):
+			# swizzle to avoid a matrix multiplication for global axis correction
+			vec = (-vec[0], vec[2], -vec[1])
+			return [min(int(round(x * 128 + 128)), 255) for x in vec]
+
+		@staticmethod
 		def get_weights(bone_ids, bone_weights):
 			return [(i, w / 255) for i, w in zip(bone_ids, bone_weights) if w > 0]
 
-		def position(self, input):
+		def unpack_longint_vec(self, input):
 			"""Unpacks and returns the self.raw_pos uint64"""
 			# print("\nunpacking")
 			# correct for size according to base, relative to 512
@@ -491,133 +514,7 @@ class Ms2Format(pyffi.object_models.xml.FileFormat):
 			# swizzle to avoid a matrix multiplication for global axis correction
 			return (-x,-z,y)
 
-		def write_verts(self, stream, data):
-			for vert in self.verts:
-				vert.write(stream, data)
-			
-		def read_tris(self, stream, data):
-			# read all tri indices for this model
-			stream.seek( self.start_buffer2 + data.ms2_header.buffer_info.vertexdatasize + self.tri_offset )
-			# print("tris offset",stream.tell())
-			# read all tri indices for this model segment
-			self.tri_indices = list( struct.unpack( str(self.tri_index_count)+"H", stream.read( self.tri_index_count*2 ) ) )
-		
-		def write_tris(self, stream, data):
-			stream.write( struct.pack( str(len(self.tri_indices))+"H", *self.tri_indices ) )
-		
-		@property
-		def lod_index(self,):
-			try:
-				lod_i = int(math.log2(self.poweroftwo))
-			except:
-				lod_i = 0
-				print("EXCEPTION: math domain for lod",self.poweroftwo)
-			return lod_i
-			
-		@lod_index.setter
-		def lod_index(self, lod_i):
-			self.poweroftwo = int(math.pow(2, lod_i))
-		
-		@property
-		def tris(self,):
-			# create non-overlapping tris
-			# reverse to account for the flipped normals from mirroring in blender
-			return [(self.tri_indices[i+2], self.tri_indices[i+1], self.tri_indices[i]) for i in range(0, len(self.tri_indices), 3)]
-			
-		@tris.setter
-		def tris(self, b_tris):
-			# clear tri array
-			self.tri_indices = []
-			for tri in b_tris:
-				# reverse to account for the flipped normals from mirroring in blender
-				self.tri_indices.extend( reversed(tri) )
-			
-			
-		def populate(self, data, ms2_stream, start_buffer2, bone_names = [], base = 512):
-			self.start_buffer2 = start_buffer2
-			self.data = data
-			self.base = base
-			self.bone_names = bone_names
-			
-			# create data lists for this model
-			self.verts = []
-			self.vertices = []
-			self.normals = []
-			self.tangents = []
-			# self.uv_layers = ( [], [], [], [] )
-			self.colors = ( [], [] )
-			self.weights = []
-			self.read_verts(ms2_stream, self.data)
-			self.read_tris(ms2_stream, self.data)
-			
-		
-			
-	class PackedVert:
-		base = 512
-		# def __init__(self, **kwargs):
-			# BasicBase.__init__(self, **kwargs)
-			# self.set_value(False)
-		
-		
-		def unpack_ushort_vector(self, vec):
-			return [ (coord - 32768) / 2048 for coord in (vec.u, vec.v) ]
-			
-		def pack_ushort_vector(self, vec):
-			return [ min(int(round(coord * 2048 + 32768)), 65535) for coord in vec]
-			
-		def unpack_ubyte_vector(self, vec):
-			vec = (vec.x, vec.y, vec.z)
-			vec = [(x-128)/128 for x in vec]
-			# swizzle to avoid a matrix multiplication for global axis correction
-			return -vec[0], -vec[2], vec[1]
-			
-		def pack_ubyte_vector(self, vec):
-			# swizzle to avoid a matrix multiplication for global axis correction
-			vec = (-vec[0], vec[2], -vec[1])
-			return [min(int(round(x*128+128)), 255) for x in vec]
-		
-		@property
-		def position(self):
-			"""Unpacks and returns the self.raw_pos uint64"""
-			# print("\nunpacking")
-			# correct for size according to base, relative to 512
-			scale = self.base / 512 / 2048
-			input = self.raw_pos
-			output = []
-			# print("inp",bin(input))
-			for i in range(3):
-				# print("\nnew coord")
-				# grab the last 20 bits with bitand
-				# bit representation: 0b11111111111111111111
-				twenty_bits = input & 0xFFFFF
-				# print("input", bin(input))
-				# print("twenty_bits = input & 0xFFFFF ", bin(twenty_bits), twenty_bits)
-				input >>= 20
-				# print("input >>= 20", bin(input))
-				# print("1",bin(1))
-				# get the rightmost bit
-				rightmost_bit = input & 1
-				# print("rightmost_bit = input & 1",bin(rightmost_bit))
-				# print(rightmost_bit, twenty_bits)
-				if not rightmost_bit:
-				# when doing this, the output mesh is fine for coords that don't exceed approximately 0.25
-				# if True:
-					# rightmost bit was 0
-					# print("rightmost_bit == 0")
-					# bit representation: 0b100000000000000000000
-					twenty_bits -= 0x100000
-				# print("final int", twenty_bits)
-				o = (twenty_bits + self.base) * scale
-				output.append(o)
-				# shift to skip the sign bit
-				input >>= 1
-			# the inidividual coordinates
-			x,y,z = output
-			# swizzle to avoid a matrix multiplication for global axis correction
-			return [-x,-z,y]
-
-		@position.setter
-		def position(self, vec):
+		def pack_longint_vec(self, vec):
 			"""Packs the input into the self.raw_pos uint64"""
 			# print("\npacking")
 			# swizzle to avoid a matrix multiplication for global axis correction
@@ -647,66 +544,77 @@ class Ms2Format(pyffi.object_models.xml.FileFormat):
 			thing3 = struct.unpack("<Q",struct.pack("<d",thing2))
 			output= thing3[0]
 			# print("out",bin(output))
-			# return output
-			self.raw_pos = output
+			return output
+
+		def write_verts(self, stream, data):
+			# if writing directly to file, doesn't support io bytes
+			# self.verts_data.tofile(stream)
+			stream.write(self.verts_data.tobytes())
+			
+		def read_tris(self, stream, data):
+			# read all tri indices for this model
+			stream.seek( self.start_buffer2 + data.ms2_header.buffer_info.vertexdatasize + self.tri_offset )
+			# print("tris offset",stream.tell())
+			# read all tri indices for this model segment
+			self.tri_indices = list( struct.unpack( str(self.tri_index_count)+"H", stream.read( self.tri_index_count*2 ) ) )
+		
+		def write_tris(self, stream, data):
+			stream.write( struct.pack( str(len(self.tri_indices))+"H", *self.tri_indices ) )
+		
+		@property
+		def lod_index(self,):
+			try:
+				lod_i = int(math.log2(self.poweroftwo))
+			except:
+				lod_i = 0
+				print("EXCEPTION: math domain for lod",self.poweroftwo)
+			return lod_i
+			
+		@lod_index.setter
+		def lod_index(self, lod_i):
+			self.poweroftwo = int(math.pow(2, lod_i))
+
+		def set_verts(self, verts):
+			"""Update self.verts_data from list of new verts"""
+			self.verts = verts
+			self.verts_data = np.zeros(len(verts), dtype=self.dt)
+			for i, (position, normal, unk_0, tangent, bone_index, uvs, vcols, bone_ids, bone_weights, fur) in enumerate(verts):
+				self.verts_data[i]["pos"] = self.pack_longint_vec(position)
+				self.verts_data[i]["normal"] = self.pack_ubyte_vector(normal)
+				self.verts_data[i]["tangent"] = self.pack_ubyte_vector(tangent)
+				self.verts_data[i]["unk"] = unk_0*255
+				self.verts_data[i]["bone index"] = bone_index
+				if "bone ids" in self.dt.fields:
+					self.verts_data[i]["bone ids"] = bone_ids
+					self.verts_data[i]["bone weights"] = list(w*255 for w in bone_weights)
+				if "uvs" in self.dt.fields:
+					self.verts_data[i]["uvs"] = list(self.pack_ushort_vector(uv) for uv in uvs)
+					if fur is not None:
+						self.verts_data[i]["uvs"][1][0], _ = self.pack_ushort_vector((fur, 0))
+				if "colors" in self.dt.fields:
+					self.verts_data[i]["colors"] = list(list(c*255 for c in vcol) for vcol in vcols)
 
 		@property
-		def normal(self,):
-			return self.unpack_ubyte_vector(self.raw_normal)
+		def tris(self,):
+			# create non-overlapping tris
+			# reverse to account for the flipped normals from mirroring in blender
+			return [(self.tri_indices[i+2], self.tri_indices[i+1], self.tri_indices[i]) for i in range(0, len(self.tri_indices), 3)]
 			
-		@normal.setter
-		def normal(self, value):
-			self.raw_normal.x, self.raw_normal.y, self.raw_normal.z = self.pack_ubyte_vector(value)
-		
-		@property
-		def tangent(self,):
-			return self.unpack_ubyte_vector(self.raw_tangent)
+		@tris.setter
+		def tris(self, b_tris):
+			# clear tri array
+			self.tri_indices = []
+			for tri in b_tris:
+				# reverse to account for the flipped normals from mirroring in blender
+				self.tri_indices.extend( reversed(tri) )
 			
-		@tangent.setter
-		def tangent(self, value):
-			self.raw_tangent.x, self.raw_tangent.y, self.raw_tangent.z = self.pack_ubyte_vector(value)
-		
-		@property
-		def uvs(self,):
-			return [self.unpack_ushort_vector(uv) for uv in self.raw_uvs]
-		
-		@uvs.setter
-		def uvs(self, uv_layers):
-			for uv, uv_coord in zip(self.raw_uvs, uv_layers):
-				uv.u, uv.v = self.pack_ushort_vector(uv_coord)
-		
-		@property
-		def fur_length(self,):
-			return self.unpack_ushort_vector(self.raw_uvs[1])[0]
 			
-		@fur_length.setter
-		def fur_length(self, f):
-			self.raw_uvs[1].u, _ = self.pack_ushort_vector( (f, 0) )
-		
-		@property
-		def weights(self,):
-			out = []
-			for i, w in zip(self.bone_ids, self.bone_weights):
-				if w > 0:
-					out.append( (i, w/255) )
-			return out
-		
-		@weights.setter
-		def weights(self, weights):
-			assert( len(weights) == 4 )
-			# assume len(w) == 4, each is a tuple of (bone index, weight) or (0, 0)
-			for i, (new_i, new_w) in enumerate(weights):
-				self.bone_ids[i] = new_i
-				self.bone_weights[i] = min(int(round(new_w * 255)), 255)
-				
-		
-		# # @property
-		# def position(self, base):
-			# """ Set this vector to values from another object that supports iteration or x,y,z properties """
-			# return read_packed_vector(self.raw_pos, base)
-				
-		# def __iter__(self):
-			# # just a convenience so we can do: x,y,z = Vector3()
-			# yield self.x
-			# yield self.y
-			# yield self.z
+		def populate(self, data, ms2_stream, start_buffer2, bone_names = [], base = 512):
+			self.start_buffer2 = start_buffer2
+			self.data = data
+			self.base = base
+			self.bone_names = bone_names
+			self.read_verts(ms2_stream, self.data)
+			self.read_tris(ms2_stream, self.data)
+			
+
