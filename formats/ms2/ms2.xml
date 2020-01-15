@@ -206,20 +206,16 @@
 		
 		This reads a whole custom mdl2 file
         <add name="magic" type="byte" arr1="4">'MDL2'</add>
-        <add name="version" type="uint" ></add>
-        <add name="flag 2" type="uint" ></add>
+        <add name="version" type="uint"/>
+        <add name="flag 2" type="uint"/>
         <add name="index" type="uint" >index of this model inside the ms2, used to find bone info</add>
 		
         <add name="name" type="SizedString" >name of ms2</add>
-        <add name="model info" type="CoreModelInfo" ></add>
-		<!-- these are aligned to 8, but are 8 bytes long already -->
-		<add name="materials 0" type="Material0" arr1="model info\mat count" ></add>
-		<add name="lods" type="LodInfo" arr1="model info\lod count" ></add>
-		<!-- these are aligned to 8, but are 4 bytes long -->
-		<add name="materials 1" type="Material1" arr1="model info\mat1 count" ></add>
-		<add name="materials 1 padding" type="uint" cond="(model info\mat1 count) > 6" arr1="(model info\mat1 count) % 2" ></add>
-		<!-- <add name="model 0" type="ModelData" cond="(model info\model count) > 0" >always present if it has a model</add> -->
-		<add name="models" type="ModelData" arr1="(model info\model count)" >only present if there is more than one model in this mdl2</add>
+        <add name="model info" type="CoreModelInfo" >gives relevant info on the mdl, including counts and pack base</add>
+		<add name="materials 0" type="Material0" arr1="model info\mat count" >name pointers for each material</add>
+		<add name="lods" type="LodInfo" arr1="model info\lod count" >lod info for each level</add>
+		<add name="materials 1" type="Material1" arr1="model info\mat1 count" >material links for each model</add>
+		<add name="models" type="ModelData" arr1="(model info\model count)" >model data blocks for this mdl2</add>
 		
     </compound>
 	
