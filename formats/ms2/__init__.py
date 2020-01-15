@@ -370,8 +370,8 @@ class Ms2Format(pyffi.object_models.xml.FileFormat):
 				])
 			elif self.flag == 533:
 				dt.extend([
-					("uvs", np.ushort, (1, 2)),
-					("zeros0", np.int32, (1,)),
+					# see walls_gate.mdl2, two uv layers
+					("uvs", np.ushort, (2, 2)),
 					("colors", np.ubyte, (1, 4)),
 					("zeros2", np.int32, (1,))
 				])
