@@ -367,8 +367,8 @@ class Ms2Format(pyffi.object_models.xml.FileFormat):
 			# uv variations
 			if self.flag == 529:
 				dt.extend([
-					("uvs", np.ushort, (1, 2)),
-					("zeros0", np.int32, (3,))
+					("uvs", np.ushort, (2, 2)),
+					("zeros0", np.int32, (2,))
 				])
 			elif self.flag in (885, 565):
 				dt.extend([
@@ -384,21 +384,20 @@ class Ms2Format(pyffi.object_models.xml.FileFormat):
 				])
 			elif self.flag == 513:
 				dt.extend([
-					("uvs", np.ushort, (1, 2)),
-					("colors", np.ubyte, (1, 4)),
+					("uvs", np.ushort, (2, 2)),
+					# ("colors", np.ubyte, (1, 4)),
 					("zeros2", np.uint64, (3,))
 				])
-			# ???
 			elif self.flag == 512:
 				dt.extend([
-					("uvs", np.ushort, (1, 2)),
-					("colors", np.ubyte, (7, 4)),
+					# tree_birch_white_03 - apparently 8 uvs
+					("uvs", np.ushort, (8, 2)),
 				])
-			# ???
 			elif self.flag == 517:
 				dt.extend([
-					("uvs", np.ushort, (1, 2)),
-					("colors", np.ubyte, (7, 4)),
+					# trees seem to have two uvs, then something like normals
+					("uvs", np.ushort, (2, 2)),
+					("colors", np.ubyte, (6, 4)),
 				])
 
 			# bone weights
