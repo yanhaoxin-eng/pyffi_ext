@@ -482,9 +482,9 @@ class Ms2Format(pyffi.object_models.xml.FileFormat):
 
 		def unpack_longint_vec(self, input):
 			"""Unpacks and returns the self.raw_pos uint64"""
-			# print("\nunpacking")
-			# correct for size according to base, relative to 512
+			# numpy uint64 does not like the bit operations so we cast to default int
 			input = int(input)
+			# correct for size according to base, relative to 512
 			scale = self.base / 512 / 2048
 			# input = self.raw_pos
 			output = []
@@ -504,8 +504,6 @@ class Ms2Format(pyffi.object_models.xml.FileFormat):
 				# print("rightmost_bit = input & 1",bin(rightmost_bit))
 				# print(rightmost_bit, twenty_bits)
 				if not rightmost_bit:
-				# when doing this, the output mesh is fine for coords that don't exceed approximately 0.25
-				# if True:
 					# rightmost bit was 0
 					# print("rightmost_bit == 0")
 					# bit representation: 0b100000000000000000000
@@ -522,7 +520,6 @@ class Ms2Format(pyffi.object_models.xml.FileFormat):
 
 		def pack_longint_vec(self, vec):
 			"""Packs the input into the self.raw_pos uint64"""
-			# print("\npacking")
 			# swizzle to avoid a matrix multiplication for global axis correction
 			x,y,z = vec
 			input = (-x,z,-y)
@@ -540,16 +537,7 @@ class Ms2Format(pyffi.object_models.xml.FileFormat):
 					output |= 1 << (21*(i+1)-1)
 				# print("restored int + correction", o)
 				output |= o << (21*i)
-				# print(bin(output))
-				# print(bin(o))
-			# output |= 1 << 63
-			# print(bin(output))
-			#print(str(struct.unpack("Q",struct.pack("d",struct.unpack("d",struct.pack("Q",output))))))
-			thing=struct.unpack("<d",struct.pack("<Q",output))
-			thing2 = -1.0*float(thing[0])
-			thing3 = struct.unpack("<Q",struct.pack("<d",thing2))
-			output= thing3[0]
-			# print("out",bin(output))
+			output |= 1 << 63
 			return output
 
 		def write_verts(self, stream, data):
