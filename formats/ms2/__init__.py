@@ -175,14 +175,20 @@ class Ms2Format(pyffi.object_models.xml.FileFormat):
 				# find the start of each using this identifier
 				zero_f = bytes.fromhex("00 00 00 00")
 				one_f = bytes.fromhex("00 00 80 3F")
+				# lion has a 1 instead of a 4
+				bone_info_marker_1 = bytes.fromhex("FF FF 00 00 00 00 00 00 01")
 				# this alone is not picky enough for mod_f_wl_unq_laboratory_corner_002_dst
-				bone_info_marker = bytes.fromhex("FF FF 00 00 00 00 00 00 04")
+				bone_info_marker_4 = bytes.fromhex("FF FF 00 00 00 00 00 00 04")
 				# there's 8 bytes before this
-				# bone_info_starts = list( x-8 for x in findall(bone_info_marker, bone_info_bytes) )
-				bone_info_starts_0 = list( x-4 for x in findall(zero_f+bone_info_marker, bone_info_bytes) )
-				bone_info_starts_1 = list( x-4 for x in findall(one_f+bone_info_marker, bone_info_bytes) )
+				bone_info_starts = []
+				for a, b in ((zero_f, bone_info_marker_1),
+							 (one_f, bone_info_marker_1),
+							 (zero_f, bone_info_marker_4),
+							 (one_f, bone_info_marker_4),
+							 ):
+					bone_info_starts.extend(x-4 for x in findall(a+b, bone_info_bytes))
 
-				bone_info_starts = list(sorted(bone_info_starts_0+bone_info_starts_1))
+				bone_info_starts = list(sorted(bone_info_starts))
 				print("bone_info_starts",bone_info_starts)
 
 				if bone_info_starts:

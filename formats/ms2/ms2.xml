@@ -313,7 +313,7 @@
         <add name="knownff" type="ushort" >this is always FFFF for now</add>
         <add name="zero0" type="ushort" >this is always 0000 for now</add>
         <add name="unknown0c" type="uint" ></add>
-        <add name="always 4" type="uint" >always 4</add>
+        <add name="unk count" type="uint" >almost always 4, 1 for male african lion</add>
         <add name="unknown14" type="uint" ></add>
         <add name="bind matrix count" type="uint" >seems to match bone count</add>
         <add name="int 0 1" type="uint" >usually 0; 1 for animal_box_large, animal_box_medium_static</add>
