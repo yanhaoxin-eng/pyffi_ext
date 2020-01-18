@@ -308,25 +308,25 @@
     </compound>
 	
     <compound name="Ms2BoneInfo">
-        <add name="indexcount1" type="uint" >index count 1</add>
-        <add name="unknown04" type="float" >seems to be either 0.0 or 1.0</add>
+        <add name="name count" type="uint" >index count 1</add>
+        <add name="float 0 1" type="float" >seems to be either 0.0 or 1.0</add>
         <add name="knownff" type="ushort" >this is always FFFF for now</add>
         <add name="zero0" type="ushort" >this is always 0000 for now</add>
         <add name="unknown0c" type="uint" ></add>
-        <add name="other count" type="uint" >always 4</add>
+        <add name="always 4" type="uint" >always 4</add>
         <add name="unknown14" type="uint" ></add>
-        <add name="count2" type="uint" >seems to match bonecount; index count2</add>
-        <add name="unknown16" type="uint" >usually 0; 1 for animal_box_large, animal_box_medium_static</add>
+        <add name="bind matrix count" type="uint" >seems to match bone count</add>
+        <add name="int 0 1" type="uint" >usually 0; 1 for animal_box_large, animal_box_medium_static</add>
         <add name="unknown20" type="uint" ></add>
 		<add name="unknown24" type="uint" ></add>
 		<add name="unknown28" type="uint" ></add>
 		<add name="unknown2C" type="uint" ></add>
 		<add name="unknown30" type="uint" ></add>
 		<add name="unknown34" type="uint" ></add>
-		<add name="count3" type="uint64" >index count3</add>
+		<add name="bone count" type="uint64" >index count3</add>
 		<add name="unknown40" type="uint" ></add>
 		<add name="unknown44" type="uint" ></add>
-		<add name="count4" type="uint64" >index count4</add>
+		<add name="bone parents count" type="uint64" >index count4</add>
 		<add name="extra uint 0" type="uint64" vercond="#PZ#">pZ only</add>
 		<add name="count5" type="uint64" >index count 5</add>
 		<add name="unknown58" type="uint" ></add>
@@ -340,13 +340,13 @@
 		<add name="unknown84" type="uint" ></add>
 		<add name="unknown88" type="uint" vercond="#JWE#" >jwe only, everything is shifted a bit due to extra uint 0</add>
 		<add name="unknown8C" type="uint" vercond="#JWE#" >same as above</add>
-        <add name="name indices" type="uint" arr1="indexcount1"></add>
-        <add name="namepadding" type="byte" arr1="(16 - ((indexcount1 * 4) % 16)) % 16">zeros. One index occupies 4 bytes; pad to multiples of 16 bytes.</add>
-		<add name="inverse bind matrices" type="Matrix44" arr1="count2">used for skinning</add>
-        <add name="pz bones" type="PzBone" arr1="count3" vercond="#PZ#">bones, rot first</add>
-        <add name="jwe bones" type="JweBone" arr1="count3" vercond="#JWE#">bones, loc first</add>
-        <add name="bone parents" type="ubyte" arr1="count4" >255 = root, index in this list is the current bone index, value is the bone's parent index</add>
-		<add name="hier1padding" type="byte" arr1="(8 - (count4 % 8)) % 8">zeros</add>
+        <add name="name indices" type="uint" arr1="name count">index into ms2 string table for bones used here</add>
+        <add name="name padding" type="byte" arr1="(16 - ((name count * 4) % 16)) % 16">zeros. One index occupies 4 bytes; pad to multiples of 16 bytes.</add>
+		<add name="inverse bind matrices" type="Matrix44" arr1="bind matrix count">used for skinning</add>
+        <add name="pz bones" type="PzBone" arr1="bone count" vercond="#PZ#">bones, rot first</add>
+        <add name="jwe bones" type="JweBone" arr1="bone count" vercond="#JWE#">bones, loc first</add>
+        <add name="bone parents" type="ubyte" arr1="bone parents count" >255 = root, index in this list is the current bone index, value is the bone's parent index</add>
+		<add name="hier1padding" type="byte" arr1="(8 - (bone parents count % 8)) % 8">zeros</add>
         <add name="unknown hier list" type="unk_hierlist_entry"  arr1="count5" cond="one64" >unclear what this is doing</add>
 		<!-- <add name="hier2padding" type="byte" arr1="(16 - ((count5 * 8) % 16)) % 16">16 zeros if followed by another BoneInfo, 8 zeros otherwise</add> -->
 		<add name="hier2padding" type="byte" arr1="8">16 zeros if followed by another BoneInfo, 8 zeros otherwise</add>
