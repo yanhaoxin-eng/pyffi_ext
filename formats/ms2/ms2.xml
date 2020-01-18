@@ -157,12 +157,25 @@
 	
     <compound name="Vector4" size="16">
         A vector in 3D space (x,y,z).
-        <field name="w" type="float">zeroth coordinate.</field>
         <field name="x" type="float">First coordinate.</field>
         <field name="y" type="float">Second coordinate.</field>
         <field name="z" type="float">Third coordinate.</field>
+        <field name="w" type="float">zeroth coordinate.</field>
     </compound>
-	
+
+    <compound name="PzBone">
+		32 bytes
+        <add name="rot" type="Vector4" />
+        <add name="loc" type="Vector3"/>
+        <add name="scale" type="float" />
+    </compound>
+
+    <compound name="JweBone">
+		32 bytes
+        <add name="loc" type="Vector3"/>
+        <add name="scale" type="float" />
+        <add name="rot" type="Vector4" />
+    </compound>
 	
     <compound name="LodInfo">
 		Part of a mdl2 fragment, read for lodcount from one of the mdl2's fixed fragment entries
@@ -329,8 +342,9 @@
 		<add name="unknown8C" type="uint" vercond="#JWE#" >same as above</add>
         <add name="name indices" type="uint" arr1="indexcount1"></add>
         <add name="namepadding" type="byte" arr1="(16 - ((indexcount1 * 4) % 16)) % 16">zeros. One index occupies 4 bytes; pad to multiples of 16 bytes.</add>
-		<add name="bone matrices" type="Matrix44" arr1="count2"></add>
-        <add name="other matrices" type="Matrix24" arr1="count3">unknown</add>
+		<add name="inverse bind matrices" type="Matrix44" arr1="count2">used for skinning</add>
+        <add name="pz bones" type="PzBone" arr1="count3" vercond="#PZ#">bones, rot first</add>
+        <add name="jwe bones" type="JweBone" arr1="count3" vercond="#JWE#">bones, loc first</add>
         <add name="bone parents" type="ubyte" arr1="count4" >255 = root, index in this list is the current bone index, value is the bone's parent index</add>
 		<add name="hier1padding" type="byte" arr1="(8 - (count4 % 8)) % 8">zeros</add>
         <add name="unknown hier list" type="unk_hierlist_entry"  arr1="count5" cond="one64" >unclear what this is doing</add>
