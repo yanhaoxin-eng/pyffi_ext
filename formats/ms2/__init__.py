@@ -201,7 +201,7 @@ class Ms2Format(pyffi.object_models.xml.FileFormat):
 					ms2_stream.seek(bone_info_address)
 					self.bone_info = Ms2Format.Ms2BoneInfo()
 					self.bone_info.read(ms2_stream, data=self)
-					print(self.bone_info)
+					# print(self.bone_info)
 					
 					self.bone_names = [self.ms2_header.names[i] for i in self.bone_info.name_indices]
 				else:
@@ -229,7 +229,7 @@ class Ms2Format(pyffi.object_models.xml.FileFormat):
 					model = self.mdl2_header.models[mat_1.model_index]
 					model.material = name
 				except:
-					print("Couldn't match material -bug?")
+					print(f"Couldn't match material {mat_1.material_index} to model {mat_1.model_index} - bug?")
 			# todo - doesn't seem to be correct, at least not for JWE dinos
 			self.mdl2_header.lod_names = [self.ms2_header.names[lod.strznameidx] for lod in self.mdl2_header.lods]
 			print("lod_names", self.mdl2_header.lod_names)
