@@ -294,10 +294,12 @@ class Ms2Format(pyffi.object_models.xml.FileFormat):
 			# modify buffer size
 			self.ms2_header.buffer_info.vertexdatasize = len(vert_bytes)
 			self.ms2_header.buffer_info.facesdatasize = len(tris_bytes)
-			
+
+			mdl2_name = os.path.basename(file)
+
 			# create name of output ms2
-			# temp_ms2_name = input_ms2_name.rsplit(".",1)[0]+"_export.ms2"
-			ms2_path = os.path.join(exp_dir, input_ms2_name)
+			new_ms2_name = mdl2_name.rsplit(".",1)[0]+".ms2"
+			ms2_path = os.path.join(exp_dir, new_ms2_name)
 			
 			# write output ms2
 			with open(ms2_path, "wb") as f:
@@ -307,10 +309,9 @@ class Ms2Format(pyffi.object_models.xml.FileFormat):
 				f.write(tris_bytes)
 				
 			# set new ms2 name to mdl2 header
-			# self.mdl2_header.name = temp_ms2_name.encode()
+			self.mdl2_header.name = new_ms2_name.encode()
 			
 			# write final mdl2
-			dir, mdl2_name = os.path.split(file)
 			mdl2_path = os.path.join(exp_dir, mdl2_name)
 			with open(mdl2_path, "wb") as f:
 				self.mdl2_header.write(f, data=self)
