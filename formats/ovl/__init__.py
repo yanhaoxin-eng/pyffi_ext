@@ -44,12 +44,10 @@ import pyffi.object_models.xml
 import pyffi.object_models.common
 import pyffi.object_models
 
-from pyffi_ext.formats.dds import DdsFormat
 from pyffi_ext.formats.ms2 import Ms2Format
-from pyffi_ext.formats.bani import BaniFormat
-from pyffi_ext.formats.fgm import FgmFormat
 
 MAX_UINT32 = 4294967295
+
 
 def djb(s):
 	# calculates DJB hash for string s
@@ -68,10 +66,7 @@ def get_sized_bytes(data, pos):
 	# it only works here because there is no buffer
 	# print("size",size, data[pos+4 : pos+30])
 	return data[pos+4 : pos+4+size]
-	
-def get_size(data, pos):
-	"""Returns uint at pos from bytes."""
-	return struct.unpack("<I", data[pos:pos+4])[0]
+
 
 class OvlFormat(pyffi.object_models.xml.FileFormat):
 	"""This class implements the Ovl format."""
@@ -380,9 +375,7 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 			# we don't use context manager so gotta close them
 			for ovs_file in ovs_dict.values():
 				ovs_file.close()
-			
-		
-		
+
 	class BufferEntry:
 		def read_data(self, archive):
 			"""Load data from archive stream into self for modification and io"""
@@ -463,8 +456,9 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 			
 		def split_data_padding(self, cut):
 			"""Move a fixed surplus padding into the padding attribute"""
-			self.padding = self.data[cut:]
-			self.data = self.data[:cut]
+			_d = self.data + self.padding
+			self.padding = _d[cut:]
+			self.data = _d[:cut]
 		
 		def link_to_header(self, archive):
 			"""Store this pointer in suitable header entry"""
@@ -478,22 +472,33 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 					entry.pointer_map[self.data_offset] = []
 				entry.pointer_map[self.data_offset].append(self)
 
-		def update_data(self, data, update_copies=False, pad_to=None):
-			"""Update data and size param"""
+		def update_data(self, data, update_copies=False, pad_to=None, include_old_pad=False):
+			"""Update data and size of this pointer"""
 			self.data = data
+			# only change padding if a new alignment is given
 			if pad_to:
-				moduloed = len(self.data) % pad_to
+				len_d = len(data)
+				# consider the old padding for alignment?
+				if include_old_pad:
+					len_d += len(self.padding)
+				moduloed = len_d % pad_to
 				if moduloed:
-					mod_padlen = pad_to - moduloed
-					self.padding = b"\x00" * mod_padlen
+					# create the new blank padding
+					new_pad = b"\x00" * (pad_to - moduloed)
 				else:
-					self.padding = b""
+					new_pad = b""
+				# append new to the old padding
+				if include_old_pad:
+					self.padding = self.padding + new_pad
+				# overwrite the old padding
+				else:
+					self.padding = new_pad
 			self.data_size = len(self.data + self.padding)
-			# todo - copies now include self, check against it or repeat setting data?
 			# update other pointers if asked to by the injector
 			if update_copies:
 				for other_pointer in self.copies:
-					other_pointer.update_data(data, pad_to=pad_to)
+					if other_pointer is not self:
+						other_pointer.update_data(data, pad_to=pad_to, include_old_pad=include_old_pad)
 			
 		def get_reader(self):
 			"""Returns a reader of its data"""
