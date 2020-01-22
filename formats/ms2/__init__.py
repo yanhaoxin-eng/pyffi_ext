@@ -436,10 +436,14 @@ class Ms2Format(pyffi.object_models.xml.FileFormat):
 				# first cast to the float colors array so unpacking doesn't use int division
 				self.colors[:] = self.verts_data[:]["colors"]
 				self.colors /= 255
+			self.normals[:] = self.verts_data[:]["normal"]
+			self.tangents[:] = self.verts_data[:]["tangent"]
+			self.normals = (self.normals - 128) / 128
+			self.tangents = (self.tangents - 128) / 128
 			for i in range(self.vertex_count):
-				self.vertices[i] = self.unpack_longint_vec(self.verts_data[i]["pos"])
-				self.normals[i] = self.unpack_ubyte_vector(self.verts_data[i]["normal"])
-				self.tangents[i] = self.unpack_ubyte_vector(self.verts_data[i]["tangent"])
+				self.vertices[i] = self.swizzle_vector(self.unpack_longint_vec(self.verts_data[i]["pos"]))
+				self.normals[i] = self.swizzle_vector(self.normals[i])
+				self.tangents[i] = self.swizzle_vector(self.tangents[i])
 
 				# stores all (bonename, weight) pairs of this vertex
 				vert_w = []
@@ -468,8 +472,7 @@ class Ms2Format(pyffi.object_models.xml.FileFormat):
 			return (vec - 32768) / 2048
 
 		@staticmethod
-		def unpack_ubyte_vector(vec):
-			vec = (vec - 128) / 128
+		def swizzle_vector(vec):
 			# swizzle to avoid a matrix multiplication for global axis correction
 			return -vec[0], -vec[2], vec[1]
 
@@ -520,10 +523,7 @@ class Ms2Format(pyffi.object_models.xml.FileFormat):
 				output.append(o)
 				# shift to skip the sign bit
 				input >>= 1
-			# the inidividual coordinates
-			x,y,z = output
-			# swizzle to avoid a matrix multiplication for global axis correction
-			return (-x,-z,y)
+			return output
 
 		def pack_longint_vec(self, vec):
 			"""Packs the input into the self.raw_pos uint64"""
