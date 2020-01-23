@@ -441,14 +441,22 @@ class Ms2Format(pyffi.object_models.xml.FileFormat):
 			self.normals = (self.normals - 128) / 128
 			self.tangents = (self.tangents - 128) / 128
 			for i in range(self.vertex_count):
-				self.vertices[i] = self.swizzle_vector(self.unpack_longint_vec(self.verts_data[i]["pos"]))
-				self.normals[i] = self.swizzle_vector(self.normals[i])
-				self.tangents[i] = self.swizzle_vector(self.tangents[i])
+				in_pos_packed = self.verts_data[i]["pos"]
+				vert, residue = self.unpack_longint_vec(in_pos_packed)
+				self.vertices[i] = self.unpack_swizzle(vert)
+
+				out_pos_packed = self.pack_longint_vec(self.pack_swizzle(self.vertices[i]), residue)
+				# print(bin(in_pos_packed), type(in_pos_packed))
+				# print(bin(out_pos_packed), type(out_pos_packed))
+				# print(in_pos_packed-out_pos_packed)
+
+				self.normals[i] = self.unpack_swizzle(self.normals[i])
+				self.tangents[i] = self.unpack_swizzle(self.tangents[i])
 
 				# stores all (bonename, weight) pairs of this vertex
 				vert_w = []
 				if self.bone_names:
-					if "bone ids" in self.dt.fields:
+					if "bone ids" in self.dt.fields and residue:
 						weights = self.get_weights(self.verts_data[i]["bone ids"], self.verts_data[i]["bone weights"])
 						vert_w = [(self.bone_names[bone_i], w) for bone_i, w in weights]
 					# fallback: skin parition
@@ -465,6 +473,8 @@ class Ms2Format(pyffi.object_models.xml.FileFormat):
 
 				# the unknown 0, 128 byte
 				vert_w.append(("unk0", self.verts_data[i]["unk"]/255))
+				# packing bit
+				vert_w.append(("residue", residue))
 				self.weights.append(vert_w)
 
 		@staticmethod
@@ -472,9 +482,14 @@ class Ms2Format(pyffi.object_models.xml.FileFormat):
 			return (vec - 32768) / 2048
 
 		@staticmethod
-		def swizzle_vector(vec):
+		def unpack_swizzle(vec):
 			# swizzle to avoid a matrix multiplication for global axis correction
 			return -vec[0], -vec[2], vec[1]
+
+		@staticmethod
+		def pack_swizzle(vec):
+			# swizzle to avoid a matrix multiplication for global axis correction
+			return -vec[0], vec[2], -vec[1]
 
 		@staticmethod
 		def pack_ushort_vector(vec):
@@ -482,8 +497,6 @@ class Ms2Format(pyffi.object_models.xml.FileFormat):
 
 		@staticmethod
 		def pack_ubyte_vector(vec):
-			# swizzle to avoid a matrix multiplication for global axis correction
-			vec = (-vec[0], vec[2], -vec[1])
 			return [min(int(round(x * 128 + 128)), 255) for x in vec]
 
 		@staticmethod
@@ -523,17 +536,15 @@ class Ms2Format(pyffi.object_models.xml.FileFormat):
 				output.append(o)
 				# shift to skip the sign bit
 				input >>= 1
-			return output
+			# input at this point is either 0 or 1
+			return output, input
 
-		def pack_longint_vec(self, vec):
-			"""Packs the input into the self.raw_pos uint64"""
-			# swizzle to avoid a matrix multiplication for global axis correction
-			x,y,z = vec
-			input = (-x,z,-y)
+		def pack_longint_vec(self, vec, residue):
+			"""Packs the input vector + residue bit into a uint64 (1, 21, 21, 21)"""
 			# correct for size according to base, relative to 512
 			scale = self.base / 512 / 2048
 			output = 0
-			for i, f in enumerate(input):
+			for i, f in enumerate(vec):
 				o = int(round(f / scale - self.base))
 				# print("restored int", o)
 				if o < 0x100000:
@@ -544,7 +555,11 @@ class Ms2Format(pyffi.object_models.xml.FileFormat):
 					output |= 1 << (21*(i+1)-1)
 				# print("restored int + correction", o)
 				output |= o << (21*i)
-			output |= 1 << 63
+			# print("bef",bin(output))
+			output |= residue << 63
+			# thing = struct.unpack("<d", struct.pack("<Q",output))
+			# thing2 = -1.0*float(thing[0])
+			# output = struct.unpack("<Q", struct.pack("<d",thing2))[0]
 			return output
 
 		def write_verts(self, stream, data):
@@ -579,10 +594,10 @@ class Ms2Format(pyffi.object_models.xml.FileFormat):
 			"""Update self.verts_data from list of new verts"""
 			self.verts = verts
 			self.verts_data = np.zeros(len(verts), dtype=self.dt)
-			for i, (position, normal, unk_0, tangent, bone_index, uvs, vcols, bone_ids, bone_weights, fur) in enumerate(verts):
-				self.verts_data[i]["pos"] = self.pack_longint_vec(position)
-				self.verts_data[i]["normal"] = self.pack_ubyte_vector(normal)
-				self.verts_data[i]["tangent"] = self.pack_ubyte_vector(tangent)
+			for i, (position, residue, normal, unk_0, tangent, bone_index, uvs, vcols, bone_ids, bone_weights, fur) in enumerate(verts):
+				self.verts_data[i]["pos"] = self.pack_longint_vec(self.pack_swizzle(position), residue)
+				self.verts_data[i]["normal"] = self.pack_ubyte_vector(self.pack_swizzle(normal))
+				self.verts_data[i]["tangent"] = self.pack_ubyte_vector(self.pack_swizzle(tangent))
 				self.verts_data[i]["unk"] = unk_0*255
 				self.verts_data[i]["bone index"] = bone_index
 				if "bone ids" in self.dt.fields:
