@@ -349,10 +349,11 @@
         <add name="bone parents" type="ubyte" arr1="bone parents count" >255 = root, index in this list is the current bone index, value is the bone's parent index</add>
 		<add name="hier1padding" type="byte" arr1="(8 - (bone parents count % 8)) % 8">zeros</add>
         <add name="unknown hier list" type="unk_hierlist_entry"  arr1="count5" cond="one64" >unclear what this is doing</add>
-		<!-- <add name="hier2padding" type="byte" arr1="(16 - ((count5 * 8) % 16)) % 16">16 zeros if followed by another BoneInfo, 8 zeros otherwise</add> -->
-		<add name="hier2padding" type="byte" arr1="8">16 zeros if followed by another BoneInfo, 8 zeros otherwise</add>
-		<!--<add name="JointDatas" type="JointData" arr1="joint data count" >joint data</add>
-		<add name="JointPadding" type="byte" arr1="4" cond="joint data count != 0" >16 zeros if followed by another BoneInfo, 8 zeros otherwise</add>-->
+		 <add name="hier2padding" type="byte" arr1="(16 - ((count5 * 8) % 16)) % 16">16 zeros if followed by another BoneInfo, 8 zeros otherwise</add>
+<!--		<add name="hier2padding" type="byte" arr1="8">16 zeros if followed by another BoneInfo, 8 zeros otherwise</add>-->
+<!--		<add name="JointDatas" type="JointData" arr1="joint data count" >joint data</add>-->
+		<add name="JointDatas" type="JointData" cond="joint data count" >joint data</add>
+<!--		<add name="JointPadding" type="byte" arr1="4" cond="joint data count != 0" >16 zeros if followed by another BoneInfo, 8 zeros otherwise</add>-->
     </compound>
 	
 	<compound name="unk_hierlist_entry">
@@ -381,7 +382,8 @@
         <add name="joint names" type="char" arr1="namespace length"></add>
         <!-- <add name="JointNamesPadding" type="byte" arr1="namespace length % 36" ></add> -->
         <add name="JointNamesPadding" type="byte" arr1="(4 - (namespace length % 8)) % 8" ></add>
-        <add name="JointInfoList" type="JointInfo" arr1="joint count" ></add>
+<!--        <add name="JointInfoList" type="JointInfo" arr1="joint count" ></add>-->
+<!--        <add name="JointInfoList" type="JointInfo" ></add>-->
     </compound>
     <compound name="JointEntry">
         <add name="matrix" type="Matrix33" ></add>
@@ -424,23 +426,40 @@
         <add name="FFs" type="short" arr1="6">bunch of -1's</add>
 		<add name="name offset" type="uint"></add>
         <add name="hitcheck count" type="uint"></add>
-        <!-- <add name="zeros" type="ubyte" arr1="16">16 zeros</add> -->
-        <add name="zeros" type="ubyte" arr1="24">16 zeros</add>
-		<add name="HitCheck" type="HitCheck Entry" arr1="hitcheck count"></add>
+         <add name="zeros" type="ubyte" arr1="16">16 zeros</add>
+<!--        <add name="zeros" type="ubyte" arr1="24">16 zeros</add>-->
+		<add name="HitCheckJWE" type="HitCheck Entry" arr1="hitcheck count"></add>
+<!--		<add name="HitCheckJWE" type="HitCheck Entry" arr1="hitcheck count" vercond="#JWE#"></add>-->
+<!--		<add name="HitCheckPZ" type="HitCheck Entry PZ" arr1="hitcheck count" vercond="#PZ#" ></add>-->
     </compound>
+
 	<compound name="HitCheck Entry">
-        <add name="unknown count" type="uint"></add>
-        <add name="unknown2" type="uint"></add>
+        <add name="type" type="uint"></add>
+        <add name="unknown2a" type="ubyte"></add>
+        <add name="unknown2b" type="ubyte"></add>
+        <add name="unknown2c" type="ubyte"></add>
+        <add name="unknown2d" type="ubyte"></add>
 		<add name="unknown3" type="uint"></add>
 		<add name="unknown4" type="uint"></add>
 		<add name="namespace offset" type="uint"></add>
-        <add name="vec4" type="Vector4" ></add>
-		
-        <add name="float" type="float" ></add>
-        <add name="extra floats" type="float" arr1="unknown count"></add>
-        <!-- <add name="matrix" type="Matrix33" ></add> -->
-        <!-- <add name="vectors" type="Vector3" arr1="2"></add> -->
+
+		<add name="bbox" type="BoundingBox" cond="type == 1"></add>
+		<add name="capsule" type="Capsule" cond="type == 2"></add>
     </compound>
+
+
+    <compound name="Capsule">
+         <add name="a" type="Vector3" ></add>
+         <add name="b" type="Vector3" ></add>
+         <add name="c" type="Vector3" ></add>
+    </compound>
+
+    <compound name="BoundingBox">
+         <add name="rotation" type="Matrix33" ></add>
+         <add name="center" type="Vector3" ></add>
+         <add name="extent" type="Vector3" ></add>
+    </compound>
+
 	<!--<compound name="unknown78list">
         <add name="unk78count" type="uint">same as BoneInfo.unnknown78</add>
 		<add name="zeros" type="byte" arr1="12">some padding</add>

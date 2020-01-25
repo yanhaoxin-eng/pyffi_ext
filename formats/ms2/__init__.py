@@ -201,7 +201,8 @@ class Ms2Format(pyffi.object_models.xml.FileFormat):
 					ms2_stream.seek(bone_info_address)
 					self.bone_info = Ms2Format.Ms2BoneInfo()
 					self.bone_info.read(ms2_stream, data=self)
-					# print(self.bone_info)
+					print(self.bone_info)
+					print("end of bone info at", ms2_stream.tell())
 					
 					self.bone_names = [self.ms2_header.names[i] for i in self.bone_info.name_indices]
 				else:
