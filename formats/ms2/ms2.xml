@@ -333,9 +333,9 @@
 		<add name="unknown58" type="uint" ></add>
 		<add name="unknown5C" type="uint" ></add>
 		<add name="one64" type="uint64" >always 1</add>
-		<add name="count6" type="uint64" >index count 6</add>
+		<add name="joint data count" type="uint64" >if joints are present, same as bone count</add>
 		<add name="count7" type="uint64" >index count 7</add>
-		<add name="joint data count" type="uint" >joint count</add>
+		<add name="joint count" type="uint" >joint count</add>
 		<add name="unknown7C" type="uint" ></add>
 		<add name="unk78count" type="uint" >unnk 78 count</add>
 		<add name="unknown84" type="uint" ></add>
@@ -351,8 +351,8 @@
         <add name="unknown hier list" type="unk_hierlist_entry"  arr1="count5" cond="one64" >unclear what this is doing</add>
 		 <add name="hier2padding" type="byte" arr1="(16 - ((count5 * 8) % 16)) % 16">16 zeros if followed by another BoneInfo, 8 zeros otherwise</add>
 <!--		<add name="hier2padding" type="byte" arr1="8">16 zeros if followed by another BoneInfo, 8 zeros otherwise</add>-->
+
 <!--		<add name="JointDatas" type="JointData" arr1="joint data count" >joint data</add>-->
-		<add name="JointDatas" type="JointData" cond="joint data count" >joint data</add>
 <!--		<add name="JointPadding" type="byte" arr1="4" cond="joint data count != 0" >16 zeros if followed by another BoneInfo, 8 zeros otherwise</add>-->
     </compound>
 	
@@ -376,13 +376,14 @@
         <add name="unknowns2" type="uint" arr1="5">0s</add>
         <add name="JointList" type="JointEntry" arr1="joint count" ></add>
         <!--<add name="JointListPadding" type="byte" arr1="(60 - ((joint count * 48) % 60)) % 60 " ></add>-->
+<!--        if i had to guess, those floats are probably several arrays of joint count after another-->
         <add name="UnknownList" type="UnknownJointEntry" arr1="joint count" ></add>
         <add name="unknown10" type="uint" arr1="joint count"></add>
         <add name="unknown11" type="uint"></add>
         <add name="joint names" type="char" arr1="namespace length"></add>
         <!-- <add name="JointNamesPadding" type="byte" arr1="namespace length % 36" ></add> -->
         <add name="JointNamesPadding" type="byte" arr1="(4 - (namespace length % 8)) % 8" ></add>
-<!--        <add name="JointInfoList" type="JointInfo" arr1="joint count" ></add>-->
+        <add name="JointInfoList" type="JointInfo" arr1="joint count" ></add>
 <!--        <add name="JointInfoList" type="JointInfo" ></add>-->
     </compound>
     <compound name="JointEntry">
@@ -428,9 +429,7 @@
         <add name="hitcheck count" type="uint"></add>
          <add name="zeros" type="ubyte" arr1="16">16 zeros</add>
 <!--        <add name="zeros" type="ubyte" arr1="24">16 zeros</add>-->
-		<add name="HitCheckJWE" type="HitCheck Entry" arr1="hitcheck count"></add>
-<!--		<add name="HitCheckJWE" type="HitCheck Entry" arr1="hitcheck count" vercond="#JWE#"></add>-->
-<!--		<add name="HitCheckPZ" type="HitCheck Entry PZ" arr1="hitcheck count" vercond="#PZ#" ></add>-->
+		<add name="HitCheck" type="HitCheck Entry" arr1="hitcheck count"></add>
     </compound>
 
 	<compound name="HitCheck Entry">
