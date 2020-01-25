@@ -79,6 +79,14 @@ class Ms2Format(pyffi.object_models.xml.FileFormat):
 	SizedString = pyffi.object_models.common.SizedString
 	ZString = pyffi.object_models.common.ZString
 
+	class Vector3:
+		def __str__(self):
+			return "[ %6.3f %6.3f %6.3f ]"%(self.x, self.y, self.z)
+
+	class Vector4:
+		def __str__(self):
+			return "[ %6.3f %6.3f %6.3f %6.3f ]"%(self.x, self.y, self.z, self.w)
+
 	class Matrix33:
 		def __str__(self):
 			return (
