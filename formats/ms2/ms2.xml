@@ -371,11 +371,11 @@
     </compound>
 
     <compound name="JointDataNasuto">
-        <add name="joint count" type="uint">4</add>
+        <add name="joint count" type="uint">variable</add>
         <add name="unknown1" type="uint" >0</add>
         <add name="unknown2" type="uint" >0</add>
         <add name="unknown3" type="uint" >0</add>
-        <add name="namespace length" type="uint" ></add>
+        <add name="unknown4" type="uint" >usually fairly big nr, 500ish</add>
         <add name="UnknownList" type="NasutoJointEntry" arr1="joint count" ></add>
         <add name="zero" type="uint" >0</add>
         <add name="count 0" type="uint" >0</add>
@@ -394,9 +394,9 @@
 <!--        list d contains PI frequently, could be limited hinge descriptors-->
 <!--        <add name="UnknownListd" type="ListDEntry" arr1="#ARG#" ></add>-->
 <!--        this is currently hard coded for nasuto, figure out logic and layout-->
-        <add name="undecoded floats" type="float" arr1="854">nasuto</add>
+<!--        <add name="undecoded floats" type="float" arr1="854">nasuto</add>-->
 <!--        <add name="undecoded floats" type="float" arr1="863">carcha</add>-->
-<!--        <add name="undecoded floats" type="float" arr1="917">velo01male</add>-->
+        <add name="undecoded floats" type="float" arr1="917">velo01male</add>
 
         <add name="indices" type="uint" arr1="#ARG#">index</add>
         <add name="indices2" type="int" arr1="JointCompound \ unknown_8">index or -1</add>
