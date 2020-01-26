@@ -352,9 +352,9 @@
 
 <!--        padding is related to bone count-->
 <!--        odd one out: JWE stairwell-->
-        <add name="hier2padding 0" type="uint64" cond="bone count #LT# 65"></add>
-        <add name="hier2padding 1" type="uint64" arr1="2" cond="64 #LT# bone count #LT# 129">128 still has 16 bytes</add>
-        <add name="hier2padding 2" type="uint64" arr1="3" cond="128 #LT# bone count">129 is the first with 24 bytes</add>
+        <add name="hier2padding 0" type="uint64" ></add>
+        <add name="hier2padding 1" type="uint64" cond="64 #LT# bone count">128 still has 16 bytes</add>
+        <add name="hier2padding 2" type="uint64" cond="128 #LT# bone count">129 is the first with 24 bytes</add>
 
 <!--experimental!!-->
 <!--        objects - pz birch, jwe stuff-->
