@@ -430,17 +430,20 @@
         <!-- <add name="JointNamesPadding" type="byte" arr1="namespace length % 36" ></add> -->
         <add name="JointNamesPadding" type="byte" arr1="(4 - (JointCompound\namespace length % 8)) % 8" ></add>
         <add name="JointInfoList" type="JointInfo" arr1="joint count" ></add>
-        <add name="JointInfoList" type="JointInfo" ></add>
+<!--        <add name="JointInfoList" type="JointInfo" ></add>-->
     </compound>
     <compound name="JointEntry">
         <add name="matrix" type="Matrix33" ></add>
         <add name="vector" type="Vector3" ></add>
     </compound>
+
     <compound name="ListCEntry">
+        <add name="one" type="uint">1 for carch and nasuto</add>
+<!--        probably not a matrix, not sure what it is-->
         <add name="matrix" type="Matrix33" ></add>
         <add name="a" type="float" ></add>
-        <add name="b" type="float" ></add>
     </compound>
+
     <compound name="UnknownJointEntry">
         <add name="floats" type="float" arr1="13"></add>
     </compound>	
