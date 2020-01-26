@@ -356,7 +356,7 @@
 <!--		<add name="JointDatas" type="JointData" cond="joint data count" >joint data</add>-->
 
 <!--        dinos only-->
-<!--        		<add name="hier2padding" type="byte" arr1="24">for carcha</add>-->
+<!--        		<add name="hier2padding" type="byte" arr1="24">for carcha, velo01male</add>-->
 <!--        		<add name="hier2padding" type="byte" arr1="16">for nasuto</add>-->
 <!--		        <add name="JointDatas" type="JointDataNasuto" cond="joint data count" arg="joint count" >joint data for dinosaurs</add>-->
 
@@ -392,14 +392,14 @@
 <!--        list d contains PI frequently, could be limited hinge descriptors-->
 <!--        <add name="UnknownListd" type="ListDEntry" arr1="#ARG#" ></add>-->
 <!--        this is currently hard coded for nasuto, figure out logic and layout-->
-<!--        <add name="undecoded floats" type="float" arr1="854">nasuto</add>-->
-        <add name="undecoded floats" type="float" arr1="863">carcha</add>
+        <add name="undecoded floats" type="float" arr1="854">nasuto</add>
+<!--        <add name="undecoded floats" type="float" arr1="863">carcha</add>-->
+<!--        <add name="undecoded floats" type="float" arr1="917">velo01male</add>-->
 
         <add name="indices" type="uint" arr1="#ARG#">index</add>
         <add name="indices2" type="int" arr1="JointCompound \ unknown_8">index or -1</add>
         <add name="joint names" type="char" arr1="JointCompound\namespace length"></add>
-        <add name="JointNamesPadding" type="byte" arr1="(4 - (JointCompound\namespace length % 8)) % 8" ></add>
-        <add name="unk before joint list" type="uint" >0</add>
+        <add name="JointNamesPadding" type="byte" arr1="(8 - (JointCompound\namespace length % 8)) % 8" ></add>
         <add name="JointInfoList" type="JointInfo" arr1="#ARG#" ></add>
 <!--        for testing-->
 <!--        <add name="JointInfoList" type="JointInfo" arr1="joint count" ></add>-->
