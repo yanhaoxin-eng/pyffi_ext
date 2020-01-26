@@ -384,8 +384,26 @@
         <add name="UnknownLista" type="JointEntry" arr1="#ARG#" ></add>
         <add name="UnknownListb" type="uint64" arr1="#ARG#" ></add>
 <!--        this one is more longer, but different entry too, seemingly all floats-->
-        <add name="UnknownListc" type="ListCEntry" arr1="JointCompound \ unknown_8" ></add>
+        <add name="UnknownListc" type="ListCEntry" arr1="#ARG#" ></add>
+<!--        may be part of list d-->
+        <add name="d" type="ushort">3</add>
+        <add name="e" type="ushort">2</add>
 
+<!--        list d contains PI frequently, could be limited hinge descriptors-->
+<!--        <add name="UnknownListd" type="ListDEntry" arr1="#ARG#" ></add>-->
+<!--        this is currently hard coded for nasuto, figure out logic and layout-->
+<!--        <add name="undecoded floats" type="float" arr1="854">nasuto</add>-->
+        <add name="undecoded floats" type="float" arr1="863">carcha</add>
+
+        <add name="indices" type="uint" arr1="#ARG#">index</add>
+        <add name="indices2" type="int" arr1="JointCompound \ unknown_8">index or -1</add>
+        <add name="joint names" type="char" arr1="JointCompound\namespace length"></add>
+        <add name="JointNamesPadding" type="byte" arr1="(4 - (JointCompound\namespace length % 8)) % 8" ></add>
+        <add name="unk before joint list" type="uint" >0</add>
+        <add name="JointInfoList" type="JointInfo" arr1="#ARG#" ></add>
+<!--        for testing-->
+<!--        <add name="JointInfoList" type="JointInfo" arr1="joint count" ></add>-->
+<!--        <add name="JointInfoList" type="JointInfo" arr1="11" ></add>-->
     </compound>
 
     <compound name="NasutoJointEntry">
@@ -419,7 +437,6 @@
 
         <add name="JointCompound" type="JointCompound" ></add>
 
-
         <add name="JointList" type="JointEntry" arr1="joint count" ></add>
         <!--<add name="JointListPadding" type="byte" arr1="(60 - ((joint count * 48) % 60)) % 60 " ></add>-->
 <!--        if i had to guess, those floats are probably several arrays of joint count after another-->
@@ -427,7 +444,6 @@
         <add name="unknown10" type="uint" arr1="joint count"></add>
         <add name="unknown11" type="uint"></add>
         <add name="joint names" type="char" arr1="JointCompound\namespace length"></add>
-        <!-- <add name="JointNamesPadding" type="byte" arr1="namespace length % 36" ></add> -->
         <add name="JointNamesPadding" type="byte" arr1="(4 - (JointCompound\namespace length % 8)) % 8" ></add>
         <add name="JointInfoList" type="JointInfo" arr1="joint count" ></add>
 <!--        <add name="JointInfoList" type="JointInfo" ></add>-->
@@ -444,45 +460,28 @@
         <add name="a" type="float" ></add>
     </compound>
 
+    <compound name="ListDEntry">
+<!--        probably not a matrix, not sure what it is-->
+        <add name="ce" type="float" ></add>
+        <add name="cb" type="float" ></add>
+        <add name="matrix" type="Matrix44" ></add>
+<!--        <add name="matrixb" type="Matrix33" ></add>-->
+<!--        <add name="c" type="Vector4" ></add>-->
+<!--        <add name="d" type="Vector4" ></add>-->
+    </compound>
+
     <compound name="UnknownJointEntry">
         <add name="floats" type="float" arr1="13"></add>
     </compound>	
 	
-	
-	
-	
-	<!-- old stuff, outdated -->
-	<compound name="JointDataOld">
-        <add name="joint count" type="uint">4</add>
-		<add name="unknown1" type="uint" >0</add>
-		<add name="unknown2" type="uint" >0</add>
-		<add name="unknown3" type="uint" >0</add>
-		<add name="namespace length" type="uint" ></add>
-		<add name="unknowns" type="uint" arr1="13">0s</add>
-		<add name="unknown4" type="uint" >1</add>
-		<add name="unknown5" type="uint" >0</add>
-		<add name="unknown6" type="uint" >1</add>
-		<add name="unknown7" type="uint" >0</add>
-		<add name="unknown8" type="uint" >matches joint count</add>
-		<add name="unknowns2" type="uint" arr1="5">0s</add>
-		<add name="JointList" type="JointEntry" arr1="joint count" ></add>
-		<add name="JointListPadding" type="byte" arr1="(60 - ((joint count * 48) % 60)) % 60 " ></add>
-		<add name="UnknownList" type="UnknownJointEntry" arr1="joint count" ></add>
-		<add name="joint names" type="char" arr1="namespace length"></add>
-		<!-- <add name="JointNamesPadding" type="byte" arr1="namespace length % 36" ></add> -->
-		<add name="JointNamesPadding" type="byte" arr1="4 - (namespace length % 4)" ></add>
-		<add name="JointInfoList" type="JointInfo" arr1="joint count" ></add>
-    </compound>
-	<compound name="UnknownJointEntryOld">
-        <add name="floats" type="float" arr1="12"></add>
-    </compound>
+
 	<compound name="JointInfo">
         <add name="eleven" type="uint">must be 11</add>
         <add name="FFs" type="short" arr1="6">bunch of -1's</add>
 		<add name="name offset" type="uint"></add>
         <add name="hitcheck count" type="uint"></add>
-         <add name="zeros" type="ubyte" arr1="16">16 zeros</add>
-<!--        <add name="zeros" type="ubyte" arr1="24">16 zeros</add>-->
+         <add name="zero" type="uint64" >8 bytes of zeros</add>
+         <add name="zeros per hitcheck" type="uint64" arr1="hitcheck count">8 bytes of zeros per hitcheck</add>
 		<add name="HitCheck" type="HitCheck Entry" arr1="hitcheck count"></add>
     </compound>
 
@@ -490,10 +489,10 @@
         <add name="type" type="uint"></add>
         <add name="unknown2a" type="ubyte"></add>
         <add name="unknown2b" type="ubyte"></add>
-        <add name="unknown2c" type="ubyte"></add>
-        <add name="unknown2d" type="ubyte"></add>
-		<add name="unknown3" type="uint"></add>
-		<add name="unknown4" type="uint"></add>
+        <add name="unknown2c" type="ubyte">16</add>
+        <add name="unknown2d" type="ubyte">0</add>
+		<add name="unknown3" type="uint">564267</add>
+		<add name="unknown4" type="uint">46</add>
 		<add name="namespace offset" type="uint"></add>
 
 		<add name="bbox" type="BoundingBox" cond="type == 1"></add>
@@ -512,18 +511,5 @@
          <add name="center" type="Vector3" ></add>
          <add name="extent" type="Vector3" ></add>
     </compound>
-
-	<!--<compound name="unknown78list">
-        <add name="unk78count" type="uint">same as BoneInfo.unnknown78</add>
-		<add name="zeros" type="byte" arr1="12">some padding</add>
-		<add name="unk78entry" type="78entrydata" arr1="unk78count"></add>
-    </compound>
-	<compound name="78entrydata">
-        <add name="byte a" type="ubyte">a</add>
-		<add name="byte b" type="ubyte">b</add>
-		<add name="unknown" type="ushort">dunno</add>
-		<add name="floats" type="float" arr1="13">13 floats</add>
-		<add name="index" type="uint">unknown index?</add>
-    </compound>-->
 
 </niftoolsxml>
