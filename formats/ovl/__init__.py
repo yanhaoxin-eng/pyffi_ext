@@ -94,10 +94,23 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 	
 	class Data(pyffi.object_models.FileFormat.Data):
 		"""A class to contain the actual Ovl data."""
-		def __init__(self):
+		def __init__(self, progress_callback = None):
+			"""Class initialisation
+			
+			:param progresss_callback: A function to call whenever we want to 
+				report updated progress. It can be called with 3 arguments, the
+				last two of which are optional. There is the message to display,
+				the progress bar value, and progress bar maximum.
+			:type progress_callback: function
+			"""
 			self.version = 0
 			self.flag_2 = 0
+			self.last_print = None
 			self.header = OvlFormat.Header()
+			if progress_callback == None:
+				self.progress_callback = self.dummy_callback
+			else:
+				self.progress_callback = progress_callback
 		
 		def inspect_quick(self, stream):
 			"""Quickly checks if stream contains DDS data, and gets the
@@ -144,8 +157,22 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 			z_str = OvlFormat.ZString()
 			z_str.read(stream, data=self)
 			return str(z_str)
+		
+		## dummy (black hole) callback for if we decide we don't want one
+		def dummy_callback(self, *args, **kwargs):
+			return
+		
+		def print_and_callback(self, message, value = None, max = None):
+			## don't print the message if it is identical to the last one - it
+			## will slow down massively repetitive tasks
+			if self.last_print != message:
+				print(message)
+				self.last_print = message
 			
-		def read(self, stream, verbose=0, file="", commands=[], ):
+			## call the callback
+			self.progress_callback(message, value, max)				
+		
+		def read(self, stream, verbose=0, file="", commands=[]):
 			"""Read a dds file.
 
 			:param stream: The stream from which to read.
@@ -185,7 +212,11 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 			# hash_enums = set()
 			
 			# add extensions to hash dict
+			hm_max = len(self.header.mimes)
+			hm_index = 0
 			for mime_entry in self.header.mimes:
+				self.print_and_callback("Adding extensions to hash dict", value = hm_index, max = hm_max)
+				hm_index += 1
 				# get the whole mime type string
 				mime_type = self.read_z_str(names_reader, mime_entry.offset)
 				# only get the extension
@@ -204,7 +235,11 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 				# print(xml_str)
 			
 			# add file name to hash dict; ignoring the extension pointer
+			hf_max = len(self.header.files)
+			hf_index = 0
 			for file_entry in self.header.files:
+				self.print_and_callback("Adding file names to hash dict", value = hf_index, max = hf_max)
+				hf_index += 1
 				# get file name from name table
 				file_name = self.read_z_str(names_reader, file_entry.offset)
 				self.name_hashdict[file_entry.file_hash] = file_name
@@ -217,7 +252,11 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 			# print(self.name_hashdict)
 			
 			# create directories
+			hd_max = len(self.header.dirs)
+			hd_index = 0
 			for dir_entry in self.header.dirs:
+				self.print_and_callback("Creating directories", value = hd_index, max = hd_max)
+				hd_index += 1
 				# get dir name from name table
 				dir_name = self.read_z_str(names_reader, dir_entry.offset)
 				# fix up the name
@@ -227,7 +266,11 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 				# print(dir)
 			
 			# get names of all texture assets
+			ht_max = len(self.header.textures)
+			ht_index = 0
 			for texture_entry in self.header.textures:
+				self.print_and_callback("Getting texture asset names", value = ht_index, max = ht_max)
+				ht_index += 1
 				# nb. 4 unknowns per texture
 				try:
 					texture_entry.name = self.name_hashdict[texture_entry.file_hash]
@@ -239,9 +282,14 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 			# print(sorted(set([t.unknown_6 for t in self.header.textures])))
 			# print(textures)
 			ovs_dict = {}
+			ha_max = len(self.header.archives)
+			ha_index = 0
 			for archive_i, archive_entry in enumerate(self.header.archives):
+				self.print_and_callback("Extracting archives", value = ha_index, max = ha_max)
+				ha_index += 1
+				
 				archive_entry.name = self.read_z_str(archive_names_reader, archive_entry.offset)
-				print("\nREADING ARCHIVE: {}".format(archive_entry.name))
+				self.print_and_callback("\nReading archive {}".format(archive_entry.name))
 				# skip archives that are empty
 				if archive_entry.compressed_size == 0:
 					print("archive is empty")
@@ -280,7 +328,11 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 					self.unzip(stream, archive_entry, archive_i, save_temp_dat = self.file+"_"+archive_entry.name+".dat")
 			
 			# find texstream buffers
+			tb_max = len(self.archives[0].sized_str_entries)
+			tb_index = 0
 			for sized_str_entry in self.archives[0].sized_str_entries:
+				self.print_and_callback("Finding texstream buffers", value = tb_index, max = tb_max)
+				tb_index += 1
 				if sized_str_entry.ext == "tex":
 					for lod_i in range(3):
 						for archive in self.archives[1:]:
@@ -289,7 +341,7 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 									sized_str_entry.data_entry.buffers.extend(other_sizedstr.data_entry.buffers)
 								
 			# postprocessing of data buffers
-			for archive in self.archives:
+			for archive in self.archives:				
 				for data_entry in archive.data_entries:
 					# just sort buffers by their index value
 					data_entry.update_buffers()
@@ -302,7 +354,7 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 				
 		def unzip(self, stream, archive_entry, archive_i, save_temp_dat=""):
 			zipped = stream.read(archive_entry.compressed_size)
-			print("Reading",archive_entry.compressed_size, len(zipped))
+			self.print_and_callback("Reading " + str(archive_entry.name))
 			self.zlib_header = zipped[:2]
 			zlib_compressed_data = zipped[2:]
 			# https://stackoverflow.com/questions/1838699/how-can-i-decompress-a-gzip-stream-with-zlib
@@ -697,10 +749,10 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 			self.header_entries = []
 			# # a dict keyed with header type hashes 
 			# headers_by_type = {}
-			# read all header entries
-			print("Header Entries")
+			# read all header entries			
 			for header_type in self.header_types:
-				for i in range(header_type.num_headers):
+				for i in range(header_type.num_headers):					
+					self.header.print_and_callback("Reading header entries - type " + str(header_type.type), value = i, max = header_type.num_headers)
 					header_entry = OvlFormat.HeaderEntry()
 					header_entry.read(self.stream, self)
 					header_entry.header_type = header_type
@@ -711,9 +763,10 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 					header_entry.basename, header_entry.ext = os.path.splitext(header_entry.name)
 					header_entry.ext = header_entry.ext[1:]
 					# store fragments per header for faster lookup
-					header_entry.fragments = []
-					print("header",header_entry.name)
-					print("size",header_entry.size)
+					header_entry.fragments = []				
+					
+					#print("header",header_entry.name)
+					#print("size",header_entry.size)
 					# print("num_files", header_entry.num_files)
 					# print("header",header_entry)
 					
@@ -730,12 +783,15 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 			check_buffer_count = 0
 			# read all data entries
 			print("Data Entries", len(self.data_entries))
+			de_max = len(self.data_entries)
+			de_index = 0
 			for data_entry in self.data_entries:
+				self.header.print_and_callback("Reading data entries", value = de_index, max = de_max)
+				de_index += 1
 				data_entry.read(self.stream, self)
 				check_buffer_count += data_entry.buffer_count
 				
 				data_entry.name = self.get_name(data_entry)
-				print("data",data_entry.name)
 				# print(data_entry)
 				
 			if check_buffer_count != self.archive_entry.num_buffers:
@@ -745,7 +801,11 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 			self.buffer_entries = [OvlFormat.BufferEntry() for i in range(self.archive_entry.num_buffers)]
 			print("Buffer Entries", len(self.buffer_entries))
 			# read all Buffer entries
+			be_max = len(self.buffer_entries)
+			be_index = 0
 			for buffer_entry in self.buffer_entries:
+				self.header.print_and_callback("Reading buffer entries", value = be_index, max = be_max)
+				be_index += 1
 				buffer_entry.read(self.stream, self)
 				# print(buffer_entry)
 
@@ -753,7 +813,11 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 			self.sized_str_entries = [OvlFormat.SizedStringEntry() for i in range(self.archive_entry.num_files)]
 			print("SizedString Entries")
 			# read all file entries type b
+			ss_max = len(self.sized_str_entries)
+			ss_index = 0
 			for sized_str_entry in self.sized_str_entries:
+				self.header.print_and_callback("Reading sizedstr entries", value = ss_index, max = ss_max)
+				ss_index += 1
 				sized_str_entry.read(self.stream, self)
 				sized_str_entry.name = self.get_name(sized_str_entry)
 				sized_str_entry.lower_name = sized_str_entry.name.lower()
@@ -775,7 +839,11 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 			self.fragments = [OvlFormat.Fragment() for i in range(self.archive_entry.num_fragments)]
 			print("Fragment Entries")
 			# read all self.fragments
+			fr_max = len(self.fragments)
+			fr_index = 0
 			for fragment in self.fragments:
+				self.header.print_and_callback("Reading fragment entries", value = fr_index, max = fr_max)
+				fr_index += 1
 				fragment.read(self.stream, self)
 				# we assign these later
 				fragment.done = False
@@ -794,10 +862,19 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 				raise AttributeError("Set header signature check failed!")
 			# print("Set Entries")
 			# read all set entries
+			se_max = len(self.set_header.sets)
+			se_index = 0
 			for set_entry in self.set_header.sets:
+				self.header.print_and_callback("Reading sets", value = se_index, max = se_max)
+				se_index += 1
 				set_entry.name = self.get_name(set_entry)
 				set_entry.entry = self.find_entry(self.sized_str_entries, set_entry.file_hash, set_entry.ext_hash)
+				
+			ae_max = len(self.set_header.assets)
+			ae_index = 0
 			for asset_entry in self.set_header.assets:
+				self.header.print_and_callback("Reading assets", value = ae_index, max = ae_max)
+				ae_index += 1
 				asset_entry.name = self.get_name(asset_entry)
 				asset_entry.entry = self.sized_str_entries[asset_entry.file_index]
 			
@@ -992,7 +1069,7 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 				frag.name = ss_entry.name
 					
 		def collect_mdl2(self, mdl2_sized_str_entry, model_info, mdl2_pointer):
-			print("Collecting model fragments for", mdl2_sized_str_entry.name)
+			#print("Collecting model fragments for", mdl2_sized_str_entry.name)
 			mdl2_sized_str_entry.fragments = self.frags_from_pointer(mdl2_pointer, 5)
 			mdl2_sized_str_entry.model_info = model_info
 			mdl2_sized_str_entry.model_count = model_info.model_count
@@ -1001,7 +1078,7 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 			mdl2_sized_str_entry.fragments[2].pointers[1].split_data_padding(4*model_info.mat_1_count)
 
 			# get and set fragments
-			print("Num model data frags",mdl2_sized_str_entry.model_count)
+			#print("Num model data frags",mdl2_sized_str_entry.model_count)
 			mdl2_sized_str_entry.model_data_frags = self.frags_from_pointer(lod_pointer, mdl2_sized_str_entry.model_count)
 
 		def map_frags(self):
@@ -1022,20 +1099,23 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 			dic = { "ms2": 3,
 					"bani": 1,
 					"tex": 2,
-                    "xmlconfig": 1,
+					"xmlconfig": 1,
 					# "enumnamer": ( (4,4), ),
 					# "motiongraphvars": ( (4,4), (4,6), (4,6), (4,6), (4,6), (4,6), (4,6), (4,6), ),
 					# "hier": ( (4,6) for x in range(19) ),
 					"spl": 1,
 					"lua": 1,
 					"assetpkg": 1,
-                    "userinterfaceicondata": 2,
+					"userinterfaceicondata": 2,
 					#"world": will be a variable length one with a 4,4; 4,6; then another variable length 4,6 set : set world before assetpkg in order
 			}
-
+			ss_max = len(sorted_sized_str_entries)
+			ss_index = 0
 			for sized_str_entry in sorted_sized_str_entries:
+				self.header.print_and_callback("Collecting fragments", value = ss_index, max = ss_max)
+				ss_index += 1
 				# get fixed fragments
-				print("Collecting fragments for",sized_str_entry.name, sized_str_entry.pointers[0].address)
+				#print("Collecting fragments for",sized_str_entry.name, sized_str_entry.pointers[0].address)
 				hi = sized_str_entry.pointers[0].header_index
 				if hi != MAX_UINT32:
 					frags = self.header_entries[hi].fragments
@@ -1183,5 +1263,3 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 			for entry in l:
 				if entry.file_hash == file_hash and entry.ext_hash == ext_hash:
 					return entry
-
-
