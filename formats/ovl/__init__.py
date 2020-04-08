@@ -107,6 +107,7 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 			self.flag_2 = 0
 			self.last_print = None
 			self.header = OvlFormat.Header()
+			self.mute = False
 			if progress_callback == None:
 				self.progress_callback = self.dummy_callback
 			else:
@@ -158,21 +159,22 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 			z_str.read(stream, data=self)
 			return str(z_str)
 		
-		## dummy (black hole) callback for if we decide we don't want one
+		# dummy (black hole) callback for if we decide we don't want one
 		def dummy_callback(self, *args, **kwargs):
 			return
 		
-		def print_and_callback(self, message, value = None, max = None):
-			## don't print the message if it is identical to the last one - it
-			## will slow down massively repetitive tasks
+		def print_and_callback(self, message, value=None, max=None):
+			# don't print the message if it is identical to the last one - it
+			# will slow down massively repetitive tasks
 			if self.last_print != message:
 				print(message)
 				self.last_print = message
 			
-			## call the callback
-			self.progress_callback(message, value, max)				
+			# call the callback
+			if not self.mute:
+				self.progress_callback(message, value, max)
 		
-		def read(self, stream, verbose=0, file="", commands=[]):
+		def read(self, stream, verbose=0, file="", commands=[], mute=False):
 			"""Read a dds file.
 
 			:param stream: The stream from which to read.
@@ -180,6 +182,7 @@ class OvlFormat(pyffi.object_models.xml.FileFormat):
 			"""
 			# store commands
 			self.commands = commands
+			self.mute = mute
 			# store file name for later
 			if file:
 				self.file = file
